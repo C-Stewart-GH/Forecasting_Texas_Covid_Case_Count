@@ -11,9 +11,89 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Load Libraries
+```{r}
+library(tidyverse)
+library(RCurl)
+library(lubridate)
+```
+
+
 # Merging Datasets
 
 ```{r}
+#Read in data directly from github
+mobility <- read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/TexasMobilityData.csv"))
+vax=read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/COVID-19%20Vaccine%20Data.csv"))
+testing=read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/Cumulative%20Tests%20over%20Time%20by%20County.csv"))
+cases=read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/Texas%20COVID-19%20Case%20Count%20Data%20by%20County.csv"))
 
+#Put dates from each data set in same format
+mobility$date=mdy(mobility$date)
+vax$Vaccination.Date=mdy(vax$Vaccination.Date)
+testing$Date=mdy(testing$Date)
+cases$Date=mdy(cases$Date)
+
+#Merge all the data with focus of keeping dates based on testing data set
+merge_tc=merge(testing,cases,by.x = "Date",by.y = "Date",all.x = T)
+merge_tc_m=merge(merge_tc,mobility,by.x = "Date",by.y = "date",all.x = T)
+merge_all=merge(merge_tc_m,vax,by.x = "Date",by.y = "Vaccination.Date",all.x = T)
+
+#Correct data types and remove unneeded columns
+str(merge_all)
+names(merge_all)
+merge_all[,11:13] <- lapply(merge_all[,11:13],function(x){as.numeric(gsub(",", "", x))})
+merge_all=select(merge_all,-c(State,People.Vaccinated.with.at.least.One.Dose,People.Fully.Vaccinated))
+
+#Remove last row with missing mobility data
+tail(merge_all) #mobility data has NAs on last row so we need to remove them
+merge_all=merge_all[-418,]
+
+#Set vaccine records to 0 before vaccine was introduced
+names(merge_all)
+merge_all[,10][is.na(merge_all[,10])]=0
+
+#Impute missing testing data by interpolating betweeen known values
+which(is.na(merge_all$Total))
+merge_all$Total[150:165]
+holder=(merge_all$Total[160]-merge_all$Total[154])/6
+merge_all$Total[155]=merge_all$Total[154]+round((holder*1))
+merge_all$Total[156]=merge_all$Total[154]+round((holder*2))
+merge_all$Total[157]=merge_all$Total[154]+round((holder*3))
+merge_all$Total[158]=merge_all$Total[154]+round((holder*4))
+merge_all$Total[159]=merge_all$Total[154]+round((holder*5))
+merge_all$Total[150:165]
+
+which(is.na(merge_all$Total))
+merge_all$Total[352:358]
+holder=(merge_all$Total[355]-merge_all$Total[353])/2
+merge_all$Total[354]=merge_all$Total[353]+round((holder*1))
+
+#Rename testing column
+names(merge_all)[2]="tests_taken"
+names(merge_all)[3]="case_count"
+names(merge_all)[10]="vaccine_doses_administered"
+
+#Difference cumulative sum columns
+merge_all$tests_taken=c(NA,diff(merge_all$tests_taken))
+merge_all$case_count=c(NA,diff(merge_all$case_count))
+head(merge_all)
+
+#Remove initial row due to loss from differencing
+merge_all=merge_all[-1,]
+
+#Verify data set is correct
+str(merge_all)
+summary(merge_all)
+dim(merge_all)
+names(merge_all)
+
+#Store in data frame called merged_data and correct index references
+merged_data=merge_all
+row.names(merged_data) <- NULL
+head(merged_data)
+
+##Write csv
+#write.csv(x = merged_data,file = "merged_data.csv")
 ```
 
