@@ -1,0 +1,216 @@
+---
+title: "Time Series Group Final Project"
+author: "Cameron Stewart and Ana Glaser"
+date: "11/6/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Libraries
+```{r}
+library(tidyverse)
+library(RCurl)
+library(lubridate)
+library(GGally)
+library(astsa)
+library(tswge)
+```
+
+
+# Merging Datasets
+
+```{r}
+#Read in data directly from github
+mobility <- read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/TexasMobilityData.csv"))
+vax=read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/COVID-19%20Vaccine%20Data.csv"))
+testing=read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/Cumulative%20Tests%20over%20Time%20by%20County.csv"))
+cases=read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/Texas%20COVID-19%20Case%20Count%20Data%20by%20County.csv"))
+
+#Put dates from each data set in same format
+mobility$date=mdy(mobility$date)
+vax$Vaccination.Date=mdy(vax$Vaccination.Date)
+testing$Date=mdy(testing$Date)
+cases$Date=mdy(cases$Date)
+
+#Merge all the data with focus of keeping dates based on testing data set
+merge_tc=merge(testing,cases,by.x = "Date",by.y = "Date",all.x = T)
+merge_tc_m=merge(merge_tc,mobility,by.x = "Date",by.y = "date",all.x = T)
+merge_all=merge(merge_tc_m,vax,by.x = "Date",by.y = "Vaccination.Date",all.x = T)
+
+#Correct data types and remove unneeded columns
+str(merge_all)
+names(merge_all)
+merge_all[,11:13] <- lapply(merge_all[,11:13],function(x){as.numeric(gsub(",", "", x))})
+merge_all=select(merge_all,-c(State,People.Vaccinated.with.at.least.One.Dose,People.Fully.Vaccinated))
+
+#Remove last row with missing mobility data
+tail(merge_all) #mobility data has NAs on last row so we need to remove them
+merge_all=merge_all[-418,]
+
+#Set vaccine records to 0 before vaccine was introduced
+names(merge_all)
+merge_all[,10][is.na(merge_all[,10])]=0
+
+#Impute missing testing data by interpolating betweeen known values
+which(is.na(merge_all$Total))
+merge_all$Total[150:165]
+holder=(merge_all$Total[160]-merge_all$Total[154])/6
+merge_all$Total[155]=merge_all$Total[154]+round((holder*1))
+merge_all$Total[156]=merge_all$Total[154]+round((holder*2))
+merge_all$Total[157]=merge_all$Total[154]+round((holder*3))
+merge_all$Total[158]=merge_all$Total[154]+round((holder*4))
+merge_all$Total[159]=merge_all$Total[154]+round((holder*5))
+merge_all$Total[150:165]
+
+which(is.na(merge_all$Total))
+merge_all$Total[352:358]
+holder=(merge_all$Total[355]-merge_all$Total[353])/2
+merge_all$Total[354]=merge_all$Total[353]+round((holder*1))
+
+#Rename testing column
+names(merge_all)[2]="tests_taken"
+names(merge_all)[3]="case_count"
+names(merge_all)[10]="vaccine_doses_administered"
+
+#Difference cumulative sum columns
+merge_all$tests_taken=c(NA,diff(merge_all$tests_taken))
+merge_all$case_count=c(NA,diff(merge_all$case_count))
+head(merge_all)
+
+#Remove initial row due to loss from differencing
+merge_all=merge_all[-1,]
+
+#Verify data set is correct
+str(merge_all)
+summary(merge_all)
+dim(merge_all)
+names(merge_all)
+
+#Store in data frame called merged_data and correct index references
+merged_data=merge_all
+row.names(merged_data) <- NULL
+head(merged_data)
+
+##Write csv
+#write.csv(x = merged_data,file = "merged_data.csv")
+```
+
+
+
+```{r}
+dataSet = read.csv(file.choose(),header = TRUE)
+cases = dataSet['Date','case_count']
+dataSet
+cases <- dataSet[, c('Date','case_count')]
+
+```
+
+
+```{r}
+#Evaluating the data
+ggpairs(dataSet[2:10])
+
+```
+
+
+
+```{r}
+plotts.sample.wge(cases$case_count)
+
+```
+
+
+
+
+
+```{r}
+
+x <- cases$case_count
+x = artrans.wge(x,1)
+z = artrans.wge(x,c=(0,0,0,0,0,0,1))
+
+aic5.wge(x,p=0:12, q=0:10)
+aic5.wge(x,p=0:12, q=0:10, type = 'bic')
+plotts.parzen.wge(x)
+
+
+```
+
+
+
+
+```{r}
+m = est.arma.wge(x,p=4, q=9)
+
+mean(x)
+
+m$phi
+m$theta
+m$avar
+
+
+f = fore.aruma.wge(x, phi = m$phi, n.ahead = 20, limits = FALSE, lastn = TRUE)
+f$f
+```
+
+
+```{r}
+
+ljung.wge(m$res, p=0, q=0)
+ljung.wge(m$res, p=0, q=0, K=48)
+
+
+plotts.sample.wge(m$res, arlimits = TRUE)
+
+```
+
+```{r}
+  Rolling_Window_ASE = function(series, trainingSize, horizon = 1, s = 0, d = 0, phis = 0, thetas = 0)
+  {
+  ASEHolder = numeric()
+  for( i in 1:(length(series)-(trainingSize + horizon) + 1))
+  {
+    forecasts = fore.aruma.wge(series[i:(i+(trainingSize-1))],phi = phis, theta = thetas, s = s, d = d,n.ahead = horizon)
+    ASE = mean((series[(trainingSize+i):(trainingSize+ i + (horizon) - 1)] - forecasts$f)^2)
+    ASEHolder[i] = ASE
+  }
+  ASEHolder
+  hist(ASEHolder)
+  WindowedASE = mean(ASEHolder)
+  print("The Summary Statistics for the Rolling Window ASE Are:")
+  print(summary(ASEHolder))
+  print(paste("The Rolling Window ASE is:",WindowedASE))
+  return(WindowedASE)
+  }
+
+
+```
+
+
+
+```{r}
+
+Rolling_Window_ASE(x,horizon = 7, s=0, d=1, phis = m$phi, thetas =m$theta,trainingSize = 60  )
+sqrt(16203842)
+
+```
+
+
+```{r}
+
+
+
+
+```
+
+
+
+
+
+
+
