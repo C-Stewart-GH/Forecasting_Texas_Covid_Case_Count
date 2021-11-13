@@ -103,7 +103,7 @@ str(cases)
 
 ```{r}
 plotts.sample.wge(covid$case_count,lag.max = 100,trunc = 35)
-plotts.sample.wge(cases$Case.Count,lag.max = 100,trunc = 35)
+plotts.sample.wge(cases$Case.Count,lag.max = 40,trunc = 35)
 
 acf(cases$Case.Count[1:(length(cases$Case.Count)/2)],lag.max = 40)
 acf(cases$Case.Count[(length(cases$Case.Count)/2+1):length(cases$Case.Count)],lag.max = 40)
