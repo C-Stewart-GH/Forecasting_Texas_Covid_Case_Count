@@ -1,0 +1,657 @@
+---
+title: "Picking up from Cameron's Book TS Project"
+author: "thank you Cameron Stewart"
+date: "11/15/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Load Packages
+
+```{r}
+library(RCurl)
+library(tswge)
+library(tidyverse)
+library(lubridate)
+library(tseries)
+```
+
+# Bring in peak finding function
+
+```{r}
+#Can also be used to find valleys if you put -x in instead of x for realization
+find_peaks <- function (x, m = 3){
+    shape <- diff(sign(diff(x, na.pad = FALSE)))
+    pks <- sapply(which(shape < 0), FUN = function(i){
+       z <- i - m + 1
+       z <- ifelse(z > 0, z, 1)
+       w <- i + m + 1
+       w <- ifelse(w < length(x), w, length(x))
+       if(all(x[c(z : i, (i + 2) : w)] <= x[i + 1])) return(i + 1) else return(numeric(0))
+    })
+     pks <- unlist(pks)
+     pks
+}
+```
+
+# Bring in valley finding function
+
+```{r}
+find_valleys <- function (x, m = 3){
+    x=-x
+    shape <- diff(sign(diff(x, na.pad = FALSE)))
+    pks <- sapply(which(shape < 0), FUN = function(i){
+       z <- i - m + 1
+       z <- ifelse(z > 0, z, 1)
+       w <- i + m + 1
+       w <- ifelse(w < length(x), w, length(x))
+       if(all(x[c(z : i, (i + 2) : w)] <= x[i + 1])) return(i + 1) else return(numeric(0))
+    })
+     pks <- unlist(pks)
+     pks
+}
+```
+
+# Bring in rolling window ASE function
+
+```{r}
+Rolling_Window_ASE = function(series, trainingSize, horizon = 1, s = 0, d = 0, phis = 0, thetas = 0)
+{
+ASEHolder = numeric()
+
+for( i in 1:(length(series)-(trainingSize + horizon) + 1))
+{
+  
+  forecasts = fore.aruma.wge(series[i:(i+(trainingSize-1))],phi = phis, theta = thetas, s = s, d = d,n.ahead = horizon)
+  
+  ASE = mean((series[(trainingSize+i):(trainingSize+ i + (horizon) - 1)] - forecasts$f)^2)
+         
+  ASEHolder[i] = ASE
+
+}
+
+ASEHolder
+hist(ASEHolder)
+WindowedASE = mean(ASEHolder)
+
+print("The Summary Statistics for the Rolling Window ASE Are:")
+print(summary(ASEHolder))
+print(paste("The Rolling Window ASE is: ",WindowedASE))
+return(WindowedASE)
+}
+```
+
+
+
+# Read in the data set data types
+
+```{r}
+covid <- read.csv(file.choose(), header = TRUE, sep = ",")
+#read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/merged_data.csv"))
+covid$Date=mdy(covid$Date)
+str(covid)
+summary(covid)
+
+cases= read.csv(file.choose(), header = TRUE, sep = ",")
+#read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/Texas%20COVID-19%20Case%20Count%20Data%20by%20County.csv"))
+cases$Date=mdy(cases$Date)
+cases$Case.Count=c(NA,diff(cases$Case.Count))
+cases=cases[2:length(cases$Date),]
+str(cases)
+
+
+```
+
+```{r}
+mergedD <- read.csv(file.choose(), header = TRUE, sep = ",")
+
+```
+
+
+# Plot reduced and full data and check for consistent covariance
+
+```{r}
+plotts.sample.wge(covid$case_count,lag.max = 100,trunc = 35)
+plotts.sample.wge(cases$Case.Count,lag.max = 40,trunc = 35)
+
+acf(cases$Case.Count[1:(length(cases$Case.Count)/2)],lag.max = 40)
+acf(cases$Case.Count[(length(cases$Case.Count)/2+1):length(cases$Case.Count)],lag.max = 40)
+
+acf(covid$case_count[1:(length(covid$case_count)/2)],lag.max = 60)
+acf(covid$case_count[(length(covid$case_count)/2+1):length(covid$case_count)],lag.max = 60)
+```
+
+# Create ARMA model
+
+```{r}
+acf(cases$Case.Count,lag.max = 60)
+pacf(cases$Case.Count,lag.max = 60)
+aic5.wge(cases$Case.Count,p = 0:33,q = 0:10)
+aic5.wge(cases$Case.Count,p = 0:15,q = 0:10,type = 'bic')
+aic5.wge(cases$Case.Count,p = 16:25,q = 0:2,type = 'bic')
+aic5.wge(cases$Case.Count,p = 26:33,q = 0:2,type = 'bic')
+
+#Create complex models
+est_fcases_p29q1=est.arma.wge(x = cases$Case.Count,p = 29,q=1)
+est_pcases_p29q1=est.arma.wge(x = covid$case_count,p = 29,q=1)
+
+est_fcases_p30q1=est.arma.wge(x = cases$Case.Count,p = 30,q=1)
+est_pcases_p30q1=est.arma.wge(x = covid$case_count,p = 30,q=1)
+
+#Create simple models
+est_fcases_p7=est.ar.wge(x = cases$Case.Count,p = 7,type = 'burg')
+est_pcases_p7=est.ar.wge(x = covid$case_count,p = 7,type = 'burg')
+
+est_fcases_p8=est.ar.wge(x = cases$Case.Count,p = 8,type = 'burg')
+est_pcases_p8=est.ar.wge(x = covid$case_count,p = 8,type = 'burg')
+
+#Identify Rolling Window ASE for short term forecast
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7, phis = est_fcases_p29q1$phi,thetas = est_fcases_p29q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 7, phis = est_pcases_p29q1$phi,thetas = est_pcases_p29q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7, phis = est_fcases_p30q1$phi,thetas = est_fcases_p30q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 7, phis = est_pcases_p30q1$phi,thetas = est_pcases_p30q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7, phis = est_fcases_p7$phi, trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 7, phis = est_pcases_p7$phi,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7, phis = est_fcases_p8$phi,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 7, phis = est_pcases_p8$phi,trainingSize = 60)
+
+#Identify Rolling Window ASE for long term forecast
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21, phis = est_fcases_p29q1$phi,thetas = est_fcases_p29q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 21, phis = est_pcases_p29q1$phi,thetas = est_pcases_p29q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21, phis = est_fcases_p30q1$phi,thetas = est_fcases_p30q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 21, phis = est_pcases_p30q1$phi,thetas = est_pcases_p30q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21, phis = est_fcases_p7$phi, trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 21, phis = est_pcases_p7$phi,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21, phis = est_fcases_p8$phi,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 21, phis = est_pcases_p8$phi,trainingSize = 60)
+
+#Put full coef of best model in partial dataset
+Rolling_Window_ASE(series = covid$case_count,horizon = 7, phis = est_fcases_p30q1$phi,thetas = est_fcases_p30q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = covid$case_count,horizon = 21, phis = est_fcases_p30q1$phi,thetas = est_fcases_p30q1$theta,trainingSize = 60)
+```
+
+# Create ARIMA model. Assume you remove the differencing first then seasonality then autocorrelation
+
+```{r}
+#Dicky-Fuller Test shows d=1 term in the data
+adf.test(covid$case_count)
+adf.test(cases$Case.Count)
+
+#Difference data
+fcases_d1=artrans.wge(cases$Case.Count,phi.tr = 1,lag.max = 100)
+pcases_d1=artrans.wge(covid$case_count,phi.tr = 1,lag.max = 100)
+
+#Verfy seasonal options. s=14, s=7, s=3.5 are most likely.
+full_d1=plotts.sample.wge(fcases_d1,lag.max = 100,trunc = 35)
+part_d1=plotts.sample.wge(pcases_d1,lag.max = 100,trunc = 35)
+
+peak_index_full=find_peaks(full_d1$dbz, m = 20)
+full_d1$freq[peak_index_full]
+1/full_d1$freq[peak_index_full]
+
+peak_index_part=find_peaks(part_d1$dbz, m = 20)
+part_d1$freq[peak_index_part]
+1/part_d1$freq[peak_index_part]
+
+full_d1=plotts.sample.wge(covid$case_count,lag.max = 100,trunc = 300)
+part_d1=plotts.sample.wge(cases$Case.Count,lag.max = 100,trunc = 300)
+
+peak_index_full=find_peaks(full_d1$dbz, m = 10)
+full_d1$freq[peak_index_full]
+1/full_d1$freq[peak_index_full]
+
+peak_index_part=find_peaks(part_d1$dbz, m = 10)
+part_d1$freq[peak_index_part]
+1/part_d1$freq[peak_index_part]
+
+#Use overfit to detect seasonality. s=7 if plausible but not fully confirmed.
+factor.wge(phi = c(rep(0,6),1))
+est.ar.wge(fcases_d1,p = 17,type = "burg")
+est.ar.wge(pcases_d1,p = 17,type = "burg")
+
+#Remove seasonality
+fcases_d1s7=artrans.wge(fcases_d1,phi.tr = c(rep(0,6),1),lag.max = 40)
+pcases_d1s7=artrans.wge(pcases_d1,phi.tr = c(rep(0,6),1),lag.max = 40)
+
+#Show there is white noise remaining (p=0 so null is rejected)
+ljung.wge(fcases_d1s7,K = 24)$pval
+ljung.wge(fcases_d1s7,K = 48)$pval
+ljung.wge(pcases_d1s7,K = 24)$pval
+ljung.wge(pcases_d1s7,K = 48)$pval
+
+#Use aic5 to find remaining correlation
+acf(fcases_d1s7,lag.max = 60)
+acf(pcases_d1s7,lag.max = 60)
+pacf(fcases_d1s7,lag.max = 60)
+pacf(pcases_d1s7,lag.max = 60)
+# aic5.wge(x = fcases_d1s7,p = 0:30,q = 0:3,type = 'aic')
+# # aic5.wge(x = pcases_d1s7,p = 0:30,q = 0:3,type = 'aic')
+aic5.wge(x = fcases_d1s7,p = 0:15,q = 0:3,type = 'bic')
+# # aic5.wge(x = pcases_d1s7,p = 0:30,q = 0:3,type = 'bic')
+# aic5.wge(x = fcases_d1s7,p = 31:37,q = 0:3,type = 'aic')
+# aic5.wge(x = fcases_d1s7,p = 39:41,q = 0:3,type = 'aic')
+
+
+#Estimate coefficients for model (came out exactly the same)
+est_fcases_d1s7p21q1=est.arma.wge(fcases_d1s7,p = 21,q=1)
+est_pcases_d1s7p21q1=est.arma.wge(pcases_d1s7,p = 21,q=1)
+
+#Check for white noise with ARMA model
+acf(artrans.wge(fcases_d1s7,phi.tr = est_fcases_d1s7p21q1$phi),lag.max = 60)
+acf(artrans.wge(pcases_d1s7,phi.tr = est_pcases_d1s7p21q1$phi),lag.max = 60)
+pacf(artrans.wge(fcases_d1s7,phi.tr = est_fcases_d1s7p21q1$phi),lag.max = 60)
+pacf(artrans.wge(pcases_d1s7,phi.tr = est_pcases_d1s7p21q1$phi),lag.max = 60)
+ljung.wge(fcases_d1s7,p = 21,q=1,K = 24)$pval
+ljung.wge(fcases_d1s7,p = 21,q=1,K = 48)$pval
+ljung.wge(pcases_d1s7,p = 21,q=1,K = 24)$pval
+ljung.wge(pcases_d1s7,p = 21,q=1,K = 48)$pval
+
+
+#Identify Rolling Window ASE for short term forecast
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,d = 1,phis = est_fcases_d1s7p21q1$phi,thetas = est_fcases_d1s7p21q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 7,s = 7,d = 1,phis = est_fcases_d1s7p21q1$phi,thetas = est_fcases_d1s7p21q1$theta,trainingSize = 60)
+
+#Identify Rolling Window ASE for long term forecast
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,d = 1,phis = est_fcases_d1s7p21q1$phi,thetas = est_fcases_d1s7p21q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 21,s = 7,d = 1,phis = est_fcases_d1s7p21q1$phi,thetas = est_fcases_d1s7p21q1$theta,trainingSize = 60)
+```
+
+# Try out some other ARIMA models based on AIC
+
+```{r}
+#Complex Models
+est_fcases_d1s7p21q1=est.arma.wge(fcases_d1s7,p = 21,q=1)
+est_pcases_d1s7p21q1=est.arma.wge(pcases_d1s7,p = 21,q=1)
+
+est_fcases_d1s7p21q2=est.arma.wge(fcases_d1s7,p = 21,q=2)
+est_pcases_d1s7p21q2=est.arma.wge(pcases_d1s7,p = 21,q=2)
+
+#Simple Models
+est_fcases_d1s7p8q1=est.arma.wge(fcases_d1s7,p = 8,q=1)
+est_pcases_d1s7p81q1=est.arma.wge(pcases_d1s7,p = 8,q=1)
+
+est_fcases_d1s7p7q1=est.arma.wge(fcases_d1s7,p = 7,q=1)
+est_pcases_d1s7p7q1=est.arma.wge(pcases_d1s7,p = 7,q=1)
+
+#ACF/PACF Model
+est_fcases_d1s7p42q1=est.arma.wge(fcases_d1s7,p = 42,q=1)
+est_pcases_d1s7p42q1=est.arma.wge(pcases_d1s7,p = 42,q=1)
+
+#Identify Rolling Window ASE for short term forecast
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,d = 1,phis = est_fcases_d1s7p21q1$phi,thetas = est_fcases_d1s7p21q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 7,s = 7,d = 1,phis = est_pcases_d1s7p21q1$phi,thetas = est_pcases_d1s7p21q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,d = 1,phis = est_fcases_d1s7p21q2$phi,thetas = est_fcases_d1s7p21q2$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 7,s = 7,d = 1,phis = est_pcases_d1s7p21q2$phi,thetas = est_pcases_d1s7p21q2$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,d = 1,phis = est_fcases_d1s7p8q1$phi,thetas = est_fcases_d1s7p8q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 7,s = 7,d = 1,phis = est_pcases_d1s7p81q1$phi,thetas = est_pcases_d1s7p81q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,d = 1,phis = est_fcases_d1s7p7q1$phi,thetas = est_fcases_d1s7p7q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 7,s = 7,d = 1,phis = est_pcases_d1s7p7q1$phi,thetas = est_pcases_d1s7p7q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,d = 1,phis = est_fcases_d1s7p42q1$phi,thetas = est_fcases_d1s7p42q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 7,s = 7,d = 1,phis = est_pcases_d1s7p42q1$phi,thetas = est_pcases_d1s7p42q1$theta,trainingSize = 60)
+
+#Identify Rolling Window ASE for long term forecast
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,d = 1,phis = est_fcases_d1s7p21q1$phi,thetas = est_fcases_d1s7p21q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 21,s = 7,d = 1,phis = est_pcases_d1s7p21q1$phi,thetas = est_pcases_d1s7p21q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,d = 1,phis = est_fcases_d1s7p21q2$phi,thetas = est_fcases_d1s7p21q2$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 21,s = 7,d = 1,phis = est_pcases_d1s7p21q2$phi,thetas = est_pcases_d1s7p21q2$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,d = 1,phis = est_fcases_d1s7p8q1$phi,thetas = est_fcases_d1s7p8q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 21,s = 7,d = 1,phis = est_pcases_d1s7p81q1$phi,thetas = est_pcases_d1s7p81q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,d = 1,phis = est_fcases_d1s7p7q1$phi,thetas = est_fcases_d1s7p7q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 21,s = 7,d = 1,phis = est_pcases_d1s7p7q1$phi,thetas = est_pcases_d1s7p7q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,d = 1,phis = est_fcases_d1s7p42q1$phi,thetas = est_fcases_d1s7p42q1$theta,trainingSize = 60)
+Rolling_Window_ASE(series = covid$case_count,horizon = 21,s = 7,d = 1,phis = est_pcases_d1s7p42q1$phi,thetas = est_pcases_d1s7p42q1$theta,trainingSize = 60)
+
+#Completing best ones
+Rolling_Window_ASE(series = covid$case_count,horizon = 7,s = 7,d = 1,phis = est_fcases_d1s7p42q1$phi,thetas = est_fcases_d1s7p42q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = covid$case_count,horizon = 21,s = 7,d = 1,phis = est_fcases_d1s7p42q1$phi,thetas = est_fcases_d1s7p42q1$theta,trainingSize = 60)
+```
+
+# Assume you remove seasonality first
+
+```{r}
+fcases_s7=artrans.wge(cases$Case.Count,phi.tr = c(rep(0,6),1),lag.max = 30)
+pcases_s7=artrans.wge(covid$case_count,phi.tr = c(rep(0,6),1),lag.max = 60)
+
+#Dicky-Fuller Test shows d=1 does not belong in the data after adding s=7
+adf.test(fcases_s7)
+adf.test(pcases_s7)
+
+#We can see the remaining data is not white noise from the ACF
+full_s7=plotts.sample.wge(fcases_s7,lag.max = 50,arlimits = T)
+part_s7=plotts.sample.wge(pcases_s7,lag.max = 50,arlimits = T)
+
+valley_index_full=find_valleys(full_s7$dbz, m = 20)
+full_s7$freq[valley_index_full]
+1/full_s7$freq[valley_index_full]
+
+valley_index_part=find_valleys(part_s7$dbz, m = 20)
+part_s7$freq[valley_index_part]
+1/part_s7$freq[valley_index_part]
+
+peak_index_full=find_peaks(full_s7$dbz, m = 20)
+full_s7$freq[peak_index_full]
+1/full_s7$freq[peak_index_full]
+
+peak_index_part=find_peaks(part_s7$dbz, m = 20)
+part_s7$freq[peak_index_part]
+1/part_s7$freq[peak_index_part]
+
+full_s7=plotts.sample.wge(fcases_s7,lag.max = 50,arlimits = T,trunc = 300)
+part_s7=plotts.sample.wge(pcases_s7,lag.max = 50,arlimits = T,trunc = 300)
+
+valley_index_full=find_valleys(full_s7$dbz, m = 20)
+full_s7$freq[valley_index_full]
+1/full_s7$freq[valley_index_full]
+
+valley_index_part=find_valleys(part_s7$dbz, m = 20)
+part_s7$freq[valley_index_part]
+1/part_s7$freq[valley_index_part]
+
+peak_index_full=find_peaks(full_s7$dbz, m = 20)
+full_s7$freq[peak_index_full]
+1/full_s7$freq[peak_index_full]
+
+peak_index_part=find_peaks(part_s7$dbz, m = 20)
+part_s7$freq[peak_index_part]
+1/part_s7$freq[peak_index_part]
+
+#Use overfit to detect any additional seasonality, none found
+factor.wge(phi = c(rep(0,6),1))
+est.ar.wge(fcases_s7,p = 17,type = "burg")[0]
+est.ar.wge(pcases_s7,p = 17,type = "burg")[0]
+
+#Show there is white noise remaining (p=0 so null is rejected)
+ljung.wge(fcases_s7,K = 24)$pval
+ljung.wge(fcases_s7,K = 48)$pval
+ljung.wge(pcases_s7,K = 24)$pval
+ljung.wge(pcases_s7,K = 48)$pval
+
+#Use aic5 to find remaining correlation
+acf(fcases_s7,lag.max = 60)
+acf(pcases_s7,lag.max = 60)
+pacf(fcases_s7,lag.max = 60)
+pacf(pcases_s7,lag.max = 60)
+# aic5.wge(x = fcases_d1s7,p = 0:30,q = 0:3,type = 'aic')
+# # aic5.wge(x = pcases_d1s7,p = 0:30,q = 0:3,type = 'aic')
+aic5.wge(x = fcases_s7,p = 11:20,q = 4:9,type = 'bic')
+aic5.wge(x = fcases_s7,p = 2,q = 9:14,type = 'aic')
+# # aic5.wge(x = pcases_d1s7,p = 0:30,q = 0:3,type = 'bic')
+# aic5.wge(x = fcases_d1s7,p = 31:37,q = 0:3,type = 'aic')
+# aic5.wge(x = fcases_d1s7,p = 39:41,q = 0:3,type = 'aic')
+
+#Models based on full data
+est_fcases_s7p2q8=est.arma.wge(fcases_s7,p = 2,q=8)
+est_fcases_s7p3q8=est.arma.wge(fcases_s7,p = 3,q=8)
+est_fcases_s7p4q8=est.arma.wge(fcases_s7,p = 4,q=8)
+est_fcases_s7p21q8=est.arma.wge(fcases_s7,p = 21,q=8)
+est_fcases_s7p35q8=est.arma.wge(fcases_s7,p = 35,q=8)
+est_fcases_s7p37q8=est.arma.wge(fcases_s7,p = 37,q=8)
+
+#Run ljung test with autocrrelation
+plotts.sample.wge(est_fcases_s7p21q8$res,lag.max = 40,arlimits = T)
+acf(est_fcases_s7p21q8$res,lag.max = 50)
+pacf(est_fcases_s7p2q8$res,lag.max = 60)
+ljung.wge(x = est_fcases_s7p2q8$res,K = 24,p = 2,q = 8)
+ljung.wge(x = est_fcases_s7p2q8$res,K = 48,p = 2,q = 8)
+
+#Identify Rolling Window ASE for short term forecast
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,phis = est_fcases_s7p2q8$phi,thetas = est_fcases_s7p2q8$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,phis = est_fcases_s7p3q8$phi,thetas = est_fcases_s7p3q8$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,phis = est_fcases_s7p4q8$phi,thetas = est_fcases_s7p4q8$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,phis = est_fcases_s7p21q8$phi,thetas = est_fcases_s7p21q8$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,phis = est_fcases_s7p35q8$phi,thetas = est_fcases_s7p35q8$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,phis = est_fcases_s7p37q8$phi,thetas = est_fcases_s7p37q8$theta,trainingSize = 60)
+
+#Identify Rolling Window ASE for long term forecast
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,phis = est_fcases_s7p2q8$phi,thetas = est_fcases_s7p2q8$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,phis = est_fcases_s7p3q8$phi,thetas = est_fcases_s7p3q8$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,phis = est_fcases_s7p4q8$phi,thetas = est_fcases_s7p4q8$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,phis = est_fcases_s7p21q8$phi,thetas = est_fcases_s7p21q8$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,phis = est_fcases_s7p35q8$phi,thetas = est_fcases_s7p35q8$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,phis = est_fcases_s7p37q8$phi,thetas = est_fcases_s7p37q8$theta,trainingSize = 60)
+```
+
+# Assume it has no seasonality
+```{r}
+fcases_d1=artrans.wge(covid$case_count,phi.tr = c(1),lag.max = 40)
+pcases_d1=artrans.wge(cases$Case.Count,phi.tr = c(1),lag.max = 40)
+
+#Dicky-Fuller Test shows another d=1 does not belong in the data
+adf.test(fcases_d1)
+adf.test(pcases_d1)
+
+#We can see the remaining data is not white noise from the ACF
+full_s7=plotts.sample.wge(fcases_d1,lag.max = 50,arlimits = T)
+part_s7=plotts.sample.wge(pcases_d1,lag.max = 50,arlimits = T)
+
+#Use overfit to detect any additional seasonality, none found
+factor.wge(phi = c(rep(0,2),1))
+est.ar.wge(fcases_d1,p = 17,type = "burg")[0]
+est.ar.wge(pcases_d1,p = 17,type = "burg")[0]
+
+#Show there is white noise remaining (p=0 so null is rejected)
+ljung.wge(fcases_d1,K = 24)$pval
+ljung.wge(fcases_d1,K = 48)$pval
+ljung.wge(pcases_d1,K = 24)$pval
+ljung.wge(pcases_d1,K = 48)$pval
+
+#Use aic5 to find remaining correlation
+acf(fcases_d1,lag.max = 60)
+acf(pcases_d1,lag.max = 60)
+pacf(fcases_d1,lag.max = 60)
+pacf(pcases_d1,lag.max = 60)
+# aic5.wge(x = fcases_d1s7,p = 0:30,q = 0:3,type = 'aic')
+# # aic5.wge(x = pcases_d1s7,p = 0:30,q = 0:3,type = 'aic')
+aic5.wge(x = fcases_d1,p = 25:30,q = 10:15,type = 'aic')
+aic5.wge(x = fcases_d1,p = 2,q = 9:14,type = 'aic')
+aic5.wge(x = fcases_d1,p = 28:30,q = 8:10,type = 'aic')
+# # aic5.wge(x = pcases_d1s7,p = 0:30,q = 0:3,type = 'bic')
+# aic5.wge(x = fcases_d1s7,p = 31:37,q = 0:3,type = 'aic')
+# aic5.wge(x = fcases_d1s7,p = 39:41,q = 0:3,type = 'aic')
+```
+
+```{r}
+#Models based on full data
+est_fcases_d1p4q9=est.arma.wge(fcases_d1,p = 4,q=9)
+est_fcases_d1p4q10=est.arma.wge(fcases_d1,p = 4,q=10)
+est_fcases_d1p19q4=est.arma.wge(fcases_d1,p = 19,q=4)
+est_fcases_d1p9q9=est.arma.wge(fcases_d1,p = 9,q=9)
+est_fcases_d1p8q8=est.arma.wge(fcases_d1,p = 8,q=8)
+est_fcases_d1p6q14=est.arma.wge(fcases_d1,p = 6,q=14)
+est_fcases_d1p14q1=est.arma.wge(fcases_d1,p = 14,q=1)
+est_fcases_d1p30q8=est.arma.wge(fcases_d1,p = 30,q=8)
+
+#Run ljung test with autocrrelation
+plotts.sample.wge(est_fcases_d1p6q14$res,lag.max = 40,arlimits = T)
+acf(est_fcases_d1p4q9$res,lag.max = 60)
+pacf(est_fcases_d1p4q9$res,lag.max = 60)
+ljung.wge(x = est_fcases_d1p4q9$res,K = 24,p = 2,q = 8)
+ljung.wge(x = est_fcases_d1p4q9$res,K = 48,p = 2,q = 8)
+
+#Identify Rolling Window ASE for short term forecast
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,d = 1,phis = est_fcases_d1p4q9$phi,thetas = est_fcases_d1p4q9$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,d = 1,phis = est_fcases_d1p4q10$phi,thetas = est_fcases_d1p4q10$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,d = 1,phis = est_fcases_d1p19q4$phi,thetas = est_fcases_d1p19q4$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,d = 1,phis = est_fcases_d1p9q9$phi,thetas = est_fcases_d1p9q9$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,d = 1,phis = est_fcases_d1p8q8$phi,thetas = est_fcases_d1p8q8$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,d = 1,phis = est_fcases_d1p6q14$phi,thetas = est_fcases_d1p6q14$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,d = 1,phis = est_fcases_d1p14q1$phi,thetas = est_fcases_d1p14q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,d = 1,phis = est_fcases_d1p30q8$phi,thetas = est_fcases_d1p30q8$theta,trainingSize = 60)
+
+#Identify Rolling Window ASE for long term forecast
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,d = 1,phis = est_fcases_d1p4q9$phi,thetas = est_fcases_d1p4q9$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,d = 1,phis = est_fcases_d1p4q10$phi,thetas = est_fcases_d1p4q10$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,d = 1,phis = est_fcases_d1p19q4$phi,thetas = est_fcases_d1p19q4$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,d = 1,phis = est_fcases_d1p9q9$phi,thetas = est_fcases_d1p9q9$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,d = 1,phis = est_fcases_d1p8q8$phi,thetas = est_fcases_d1p8q8$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,d = 1,phis = est_fcases_d1p6q14$phi,thetas = est_fcases_d1p6q14$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,d = 1,phis = est_fcases_d1p14q1$phi,thetas = est_fcases_d1p14q1$theta,trainingSize = 60)
+
+Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,d = 1,phis = est_fcases_d1p30q8$phi,thetas = est_fcases_d1p30q8$theta,trainingSize = 60)
+```
+
+# Generate examples from models selected
+
+```{r}
+plotts.wge(cases$Case.Count)
+
+#Generated ARIMA(21,0,8)
+plotts.wge(gen.aruma.wge(600,phi = est_fcases_s7p21q8$phi,theta =  est_fcases_s7p21q8$theta,s = 7,vara = est_fcases_s7p21q8$avar,sn = 25300))
+
+#Generated ARIMA(6,1,14)
+plotts.wge(gen.aruma.wge(600,phi = est_fcases_d1p6q14$phi,theta =  est_fcases_d1p6q14$theta,d = 1,vara = est_fcases_d1p6q14$avar,sn = 60))
+```
+
+# Look at the crosssorrelations, it appears there is a strong lag 1 component
+
+```{r}
+
+merged <- mergedD[,c('Date','case_count','tests_taken', 'vaccine_doses_administered')]
+a <- mergedD$case_count[1:395]
+b <- mergedD$tests_taken[1:395]
+c <- mergedD$vaccine_doses_administered[1:395]
+
+actuals <- mergedD$case_count[396:416]
+ccf(b,a)
+X = cbind(a,b)
+
+plot(mergedD$case_count, type = "l")
+plot(mergedD$tests_taken, type = "l", col="Red")
+plot(mergedD$vaccine_doses_administered, type = "l", col="Blue")
+
+```
+
+#select lag 1 since it has the highest AIC
+
+```{r}
+VARselect(X)
+lsfit = VAR(X, p=1, type = "const")
+```
+
+```{r}
+preds_SHORT = predict(lsfit, n.ahead = 7)
+preds_SHORT
+
+preds_LONG = predict(lsfit, n.ahead = 21)
+preds_LONG
+
+z <- preds_SHORT$fcst$a[0:7,1]
+
+zz <- preds_LONG$fcst$a[0:21,1]
+
+
+
+
+plot(merged$case_count, type = "l", main=ASE_long)
+lines(seq(400,406,1), z, type = "l", col = "red")
+lines(seq(400,420,1), zz, type = "l", col = "blue")
+
+
+
+```
+
+```{r}
+
+ASE_short = mean((actuals-z)^2)
+ASE_short
+
+ASE_long = mean((actuals-zz)^2)
+ASE_long
+
+
+#RW_ASE_LONG = Rolling_Window_ASE(x,horizon = 21, trainingSize = 60  )
+
+
+```
+
+
+```{r}
+library(nnfor)
+
+cases = merged$case_count
+tests = merged$tests_taken
+vaccines = merged$vaccine_doses_administered
+mobility = mergedD$parks_percent_change_from_baseline
+
+covidData = ts(cases[1:395])
+covidX = data.frame(testsTS = ts(tests), vaccinesTS = ts(vaccines))
+fitCOVID = mlp(covidData,xreg = covidX)
+fcstCOVID= forecast(fitCOVID,h=21,xreg = covidX)
+
+plot(merged$case_count, type = "l", main=ASE_long)
+lines(seq(400,420),fcstCOVID$mean,col = "blue")
+
+
+ASE_LONG = mean((cases[397:419] - fcstCOVID$mean)^2)
+ASE_LONG
+
+covidDataShort = ts(cases[1:413])
+fitCOVID = mlp(covidDataShort,xreg = covidX)
+fcstCOVID_short= forecast(fitCOVID,h=3,xreg = covidX)
+plot(covidData[416:419],type="l")
+lines(seq(1,3),fcstCOVID$mean,col = "blue")
+ASE_SHORT = mean((cases[395:419] - fcstCOVID$mean)^2)
+ASE_SHORT
+
+
+
+
+
+
+```
+
+What happens when we add another regressor?
+
+```{r}
+covidData = ts(cases[1:395])
+covidXX = data.frame(testsTS = ts(tests), vaccinesTS = ts(vaccines))
+fitCOVIDXX = mlp(covidData,xreg = covidXX)
+fcstCOVIDXX= forecast(fitCOVIDXX,h=21,xreg = covidXX)
+
+plot(merged$case_count, type = "l")
+lines(seq(400,420),fcstCOVID$mean,col = "blue")
+lines(seq(400,420),fcstCOVIDXX$mean,col = "red")
+lines(seq(400,420,1), zz, type = "l", col = "green")
+
+
+```
