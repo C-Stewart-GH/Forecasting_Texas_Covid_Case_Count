@@ -15,6 +15,8 @@ library(tswge)
 library(tidyverse)
 library(lubridate)
 library(tseries)
+library(stats)
+library(vars)
 ```
 
 # Bring in peak finding function
@@ -542,7 +544,7 @@ plotts.wge(gen.aruma.wge(600,phi = est_fcases_s7p21q8$phi,theta =  est_fcases_s7
 plotts.wge(gen.aruma.wge(600,phi = est_fcases_d1p6q14$phi,theta =  est_fcases_d1p6q14$theta,d = 1,vara = est_fcases_d1p6q14$avar,sn = 60))
 ```
 
-# Look at the crosssorrelations, it appears there is a strong lag 1 component
+# Look at the crosssorrelations, it appears there is a strong lag -2 component
 
 ```{r}
 
@@ -552,7 +554,7 @@ b <- mergedD$tests_taken[1:395]
 c <- mergedD$vaccine_doses_administered[1:395]
 
 actuals <- mergedD$case_count[396:416]
-ccf(b,a)
+ccf(a,b)
 X = cbind(a,b)
 
 plot(mergedD$case_count, type = "l")
@@ -565,7 +567,7 @@ plot(mergedD$vaccine_doses_administered, type = "l", col="Blue")
 
 ```{r}
 VARselect(X)
-lsfit = VAR(X, p=1, type = "const")
+lsfit = VAR(X, p=7, type = "const", season = NULL, exogen = NULL)
 ```
 
 ```{r}
@@ -592,15 +594,16 @@ lines(seq(400,420,1), zz, type = "l", col = "blue")
 
 ```{r}
 
-ASE_short = mean((actuals-z)^2)
-ASE_short
+actuals_short = actuals[0:7]
+z
+ASE_short = mean((actuals_short-z)^2)
+RMSE_short = sqrt(ASE_short) 
+RMSE_short
 
 ASE_long = mean((actuals-zz)^2)
 ASE_long
-
-
-#RW_ASE_LONG = Rolling_Window_ASE(x,horizon = 21, trainingSize = 60  )
-
+RMSE_LONG = sqrt(ASE_long) 
+RMSE_LONG
 
 ```
 
@@ -622,18 +625,21 @@ plot(merged$case_count, type = "l", main=ASE_long)
 lines(seq(400,420),fcstCOVID$mean,col = "blue")
 
 
-ASE_LONG = mean((cases[397:419] - fcstCOVID$mean)^2)
-ASE_LONG
+ASE_DEEP_LONG = mean((tail(cases,21) - fcstCOVID$mean)^2)
+ASE_DEEP_LONG
+RMSE_DEEP_LONG = sqrt(ASE_DEEP_LONG)
+RMSE_DEEP_LONG
 
-covidDataShort = ts(cases[1:413])
-fitCOVID = mlp(covidDataShort,xreg = covidX)
-fcstCOVID_short= forecast(fitCOVID,h=3,xreg = covidX)
-plot(covidData[416:419],type="l")
-lines(seq(1,3),fcstCOVID$mean,col = "blue")
-ASE_SHORT = mean((cases[395:419] - fcstCOVID$mean)^2)
-ASE_SHORT
+covidDataShort = ts(cases[1:409])
+fitCOVID_short = mlp(covidDataShort,xreg = covidX)
+fcstCOVID_short= forecast(fitCOVID_short,h=7,xreg = covidX)
+plot(merged$case_count, type = "l", main=ASE_long)
+lines(seq(410,416),fcstCOVID_short$mean,col = "blue")
 
-
+ASE_DEEP_SHORT = mean((tail(cases,7) - fcstCOVID_short$mean)^2)
+ASE_DEEP_SHORT
+RMSE_DEEP_SHORT = sqrt(ASE_DEEP_SHORT)
+RMSE_DEEP_SHORT
 
 
 
@@ -644,14 +650,45 @@ What happens when we add another regressor?
 
 ```{r}
 covidData = ts(cases[1:395])
-covidXX = data.frame(testsTS = ts(tests), vaccinesTS = ts(vaccines))
+covidXX = data.frame(testsTS = ts(tests), vaccinesTS = ts(vaccines), rec_mobility= ts(mobility))
 fitCOVIDXX = mlp(covidData,xreg = covidXX)
 fcstCOVIDXX= forecast(fitCOVIDXX,h=21,xreg = covidXX)
 
-plot(merged$case_count, type = "l")
-lines(seq(400,420),fcstCOVID$mean,col = "blue")
-lines(seq(400,420),fcstCOVIDXX$mean,col = "red")
-lines(seq(400,420,1), zz, type = "l", col = "green")
+plot(tail(merged$case_count,21), type = "l", ylim=c(-2000,10000))
+lines(seq(1,21),fcstCOVID$mean,col = "blue")
+lines(seq(1,21),fcstCOVIDXX$mean,col = "red")
+lines(seq(1,21), zz, type = "l", col = "green")
 
-
+ASE_DEEP_LONG_XX = mean((tail(cases,21) - fcstCOVIDXX$mean)^2)
+ASE_DEEP_LONG_XX
+RMSE_DEEP_LONG_XX = sqrt(ASE_DEEP_LONG_XX)
+RMSE_DEEP_LONG_XX
+plot(fitCOVIDXX)
 ```
+
+
+What happens when we add OTHER regressor?
+
+```{r}
+
+parks = mergedD$parks_percent_change_from_baseline
+
+covidData = ts(cases[1:395])
+covidXX = data.frame(testsTS = ts(tests), vaccinesTS = ts(vaccines), rec_mobility= ts(mobility))
+fitCOVIDXX = mlp(covidData,xreg = covidXX)
+fcstCOVIDXX= forecast(fitCOVIDXX,h=21,xreg = covidXX)
+
+plot(tail(merged$case_count,21), type = "l", ylim=c(-2000,10000))
+lines(seq(1,21),fcstCOVID$mean,col = "blue")
+lines(seq(1,21),fcstCOVIDXX$mean,col = "red")
+lines(seq(1,21), zz, type = "l", col = "green")
+
+ASE_DEEP_LONG_XX = mean((tail(cases,21) - fcstCOVIDXX$mean)^2)
+ASE_DEEP_LONG_XX
+RMSE_DEEP_LONG_XX = sqrt(ASE_DEEP_LONG_XX)
+RMSE_DEEP_LONG_XX
+```
+
+
+
+
