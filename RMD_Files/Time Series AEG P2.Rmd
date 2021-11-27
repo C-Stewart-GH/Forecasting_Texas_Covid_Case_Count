@@ -89,24 +89,26 @@ return(WindowedASE)
 # Read in the data set data types
 
 ```{r}
-covid <- read.csv(file.choose(), header = TRUE, sep = ",")
-#read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/merged_data.csv"))
-covid$Date=mdy(covid$Date)
-str(covid)
-summary(covid)
 
-cases= read.csv(file.choose(), header = TRUE, sep = ",")
-#read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/Texas%20COVID-19%20Case%20Count%20Data%20by%20County.csv"))
-cases$Date=mdy(cases$Date)
-cases$Case.Count=c(NA,diff(cases$Case.Count))
-cases=cases[2:length(cases$Date),]
-str(cases)
+# 
+# #covid <- read.csv(file.choose(), header = TRUE, sep = ",")
+# read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/merged_data.csv"))
+# covid$Date=mdy(covid$Date)
+# str(covid)
+# summary(covid)
+# 
+# #cases= read.csv(file.choose(), header = TRUE, sep = ",")
+# #read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/Texas%20COVID-19%20Case%20Count%20Data%20by%20County.csv"))
+# cases$Date=mdy(cases$Date)
+# cases$Case.Count=c(NA,diff(cases$Case.Count))
+# cases=cases[2:length(cases$Date),]
+# str(cases)
 
 
 ```
 
 ```{r}
-mergedD <- read.csv(file.choose(), header = TRUE, sep = ",")
+#mergedD <- read.csv(file.choose(), header = TRUE, sep = ",")
 
 ```
 
@@ -568,6 +570,7 @@ plot(mergedD$vaccine_doses_administered, type = "l", col="Blue")
 ```{r}
 VARselect(X)
 lsfit = VAR(X, p=7, type = "const", season = NULL, exogen = NULL)
+
 ```
 
 ```{r}
@@ -580,8 +583,6 @@ preds_LONG
 z <- preds_SHORT$fcst$a[0:7,1]
 
 zz <- preds_LONG$fcst$a[0:21,1]
-
-
 
 
 plot(merged$case_count, type = "l", main=ASE_long)
@@ -690,5 +691,25 @@ RMSE_DEEP_LONG_XX
 ```
 
 
+```{r}
+
+parks = mergedD$parks_percent_change_from_baseline
+retail = mergedD$retail_and_recreation_percent_change_from_baseline
+
+covidData = ts(cases[1:395])
+covidXX = data.frame(testsTS = ts(tests), vaccinesTS = ts(vaccines), rec_mobility= ts(mobility), rec_mobility= ts(retail))
+fitCOVIDXX = mlp(covidData,xreg = covidXX)
+fcstCOVIDXX= forecast(fitCOVIDXX,h=21,xreg = covidXX)
+
+plot(tail(merged$case_count,21), type = "l", ylim=c(-2000,10000))
+lines(seq(1,21),fcstCOVID$mean,col = "blue")
+lines(seq(1,21),fcstCOVIDXX$mean,col = "red")
+lines(seq(1,21), zz, type = "l", col = "green")
+
+ASE_DEEP_LONG_XX = mean((tail(cases,21) - fcstCOVIDXX$mean)^2)
+ASE_DEEP_LONG_XX
+RMSE_DEEP_LONG_XX = sqrt(ASE_DEEP_LONG_XX)
+RMSE_DEEP_LONG_XX
+```
 
 
