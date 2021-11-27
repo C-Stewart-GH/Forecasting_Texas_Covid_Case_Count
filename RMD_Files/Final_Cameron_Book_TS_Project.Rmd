@@ -152,9 +152,9 @@ est_fcases_s7p21q8=est.arma.wge(fcases_s7,p = 21,q=8)
 #Run ljung test with autocrrelation
 plotts.sample.wge(est_fcases_s7p21q8$res,lag.max = 40,arlimits = T)
 acf(est_fcases_s7p21q8$res,lag.max = 50)
-pacf(est_fcases_s7p2q8$res,lag.max = 60)
-ljung.wge(x = est_fcases_s7p2q8$res,K = 24,p = 2,q = 8)
-ljung.wge(x = est_fcases_s7p2q8$res,K = 48,p = 2,q = 8)
+pacf(est_fcases_s7p21q8$res,lag.max = 60)
+ljung.wge(x = est_fcases_s7p21q8$res,K = 24,p = 2,q = 8)
+ljung.wge(x = est_fcases_s7p21q8$res,K = 48,p = 2,q = 8)
 
 #Identify Rolling Window ASE for short term forecast
 Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,phis = est_fcases_s7p21q8$phi,thetas = est_fcases_s7p21q8$theta,trainingSize = 60)
@@ -193,10 +193,10 @@ est_fcases_d1p6q14=est.arma.wge(fcases_d1,p = 6,q=14)
 
 #Run ljung test with autocrrelation
 plotts.sample.wge(est_fcases_d1p6q14$res,lag.max = 40,arlimits = T)
-acf(est_fcases_d1p4q9$res,lag.max = 60)
-pacf(est_fcases_d1p4q9$res,lag.max = 60)
-ljung.wge(x = est_fcases_d1p4q9$res,K = 24,p = 2,q = 8)
-ljung.wge(x = est_fcases_d1p4q9$res,K = 48,p = 2,q = 8)
+acf(est_fcases_d1p6q14$res,lag.max = 60)
+pacf(est_fcases_d1p6q14$res,lag.max = 60)
+ljung.wge(x = est_fcases_d1p6q14$res,K = 24,p = 2,q = 8)
+ljung.wge(x = est_fcases_d1p6q14$res,K = 48,p = 2,q = 8)
 
 #Identify Rolling Window ASE for short term forecast
 Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,d = 1,phis = est_fcases_d1p6q14$phi,thetas = est_fcases_d1p6q14$theta,trainingSize = 60)
@@ -664,39 +664,48 @@ long_ASE_fit_mlp2^.5
 
 # Mess around section
 ```{r}
-test=covid_reduced
-test$case_count=c(0,artrans.wge(test$case_count))
+options(scipen = 0)
+par(mfrow=c(2,2))
+plotts.wge(covid$vaccine_doses_administered)
+names(covid)
+plotts.sample.wge(covid$mobility_mean)
+plotts.sample.wge(covid$tests_taken)
+plotts.sample.wge(covid$vaccine_doses_administered)
 
-#Test a first differenced cases only with seasonality
-VARselect(covid_reduced_cases_d1,lag.max = 25,type = 'const',season = 7)
-  #AIC 8, BIC 8
-
-#Fit based on AIC
-fit6a=VAR(covid_reduced_cases_d1,p=8,type="const",season = 7)
-summary(fit6a)
-preds=predict(fit6a,n.ahead=21)
-par(mfrow=c(1,1))
-
-#Fan charts
-fanchart(preds, colors = brewer.pal(n = 8, name = "Blues"))
-
-#Entire Plot
-plot(seq(1,dim(covid_reduced_cases_d1)[1],1),covid_reduced_cases_d1$case_count, type = "l")
-lines(seq((dim(covid_reduced_cases_d1)[1]-20),dim(covid_reduced_cases_d1)[1],1),preds$fcst$case_count[,1],type = "l",col='blue')
-
-#Visualize only forecasted points
-plot(tail(covid_reduced_cases_d1$case_count,21), type = "l",ylim=c(-3900,4600))
-lines(preds$fcst$case_count[,1],type = "l",col='blue')
-
-short_ASE_fit6a = mean((tail(covid_reduced_cases_d1$case_count,21)[1:7]-preds$fcst$case_count[1:7,1])^2) 
-short_ASE_fit6a
-short_ASE_fit6a^.5
-#7 Day RMSE of 1135.7
-#Maybe try to look up rolling window version
-
-long_ASE_fit6a = mean((tail(covid_reduced_cases_d1$case_count,21)-preds$fcst$case_count[,1])^2) 
-long_ASE_fit6a
-long_ASE_fit6a^.5
-#21 Day RMSE of 1116.739 which is much lower than the 3806 from our ARIMA(6,1,14) model and lowest RMSE
+str(covid)
+# test=covid_reduced
+# test$case_count=c(0,artrans.wge(test$case_count))
+# 
+# #Test a first differenced cases only with seasonality
+# VARselect(covid_reduced_cases_d1,lag.max = 25,type = 'const',season = 7)
+#   #AIC 8, BIC 8
+# 
+# #Fit based on AIC
+# fit6a=VAR(covid_reduced_cases_d1,p=8,type="const",season = 7)
+# summary(fit6a)
+# preds=predict(fit6a,n.ahead=21)
+# par(mfrow=c(1,1))
+# 
+# #Fan charts
+# fanchart(preds, colors = brewer.pal(n = 8, name = "Blues"))
+# 
+# #Entire Plot
+# plot(seq(1,dim(covid_reduced_cases_d1)[1],1),covid_reduced_cases_d1$case_count, type = "l")
+# lines(seq((dim(covid_reduced_cases_d1)[1]-20),dim(covid_reduced_cases_d1)[1],1),preds$fcst$case_count[,1],type = "l",col='blue')
+# 
+# #Visualize only forecasted points
+# plot(tail(covid_reduced_cases_d1$case_count,21), type = "l",ylim=c(-3900,4600))
+# lines(preds$fcst$case_count[,1],type = "l",col='blue')
+# 
+# short_ASE_fit6a = mean((tail(covid_reduced_cases_d1$case_count,21)[1:7]-preds$fcst$case_count[1:7,1])^2) 
+# short_ASE_fit6a
+# short_ASE_fit6a^.5
+# #7 Day RMSE of 1135.7
+# #Maybe try to look up rolling window version
+# 
+# long_ASE_fit6a = mean((tail(covid_reduced_cases_d1$case_count,21)-preds$fcst$case_count[,1])^2) 
+# long_ASE_fit6a
+# long_ASE_fit6a^.5
+# #21 Day RMSE of 1116.739 which is much lower than the 3806 from our ARIMA(6,1,14) model and lowest RMSE
 ```
 
