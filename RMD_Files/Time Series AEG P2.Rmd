@@ -99,11 +99,11 @@ return(WindowedASE)
 # 
 #cases= read.csv(file.choose(), header = TRUE, sep = ",")
 # #read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/Texas%20COVID-19%20Case%20Count%20Data%20by%20County.csv"))
-#cases$Date=mdy(cases$Date)
-#cases$Case.Count=c(NA,diff(cases$Case.Count))
-#cases=cases[2:length(cases$Date),]
-#str(cases)
-
+# cases$Date=mdy(cases$Date)
+# cases$Case.Count=c(NA,diff(cases$Case.Count))
+# cases=cases[2:length(cases$Date),]
+# str(cases)
+#cases = cases$Case.Count
 
 ```
 
@@ -187,10 +187,21 @@ mobility = mergedD$parks_percent_change_from_baseline
 
 covidData = ts(cases[1:395])
 covidX = data.frame(testsTS = ts(tests), vaccinesTS = ts(vaccines))
+set.seed(2)
 fitCOVID = mlp(covidData,xreg = covidX)
 fcstCOVID= forecast(fitCOVID,h=21,xreg = covidX)
 
-plot(merged$case_count, type = "l", main=ASE_long)
+plot(fitCOVID)
+plot(fcstCOVID)
+
+plot(fcstCOVID$mean,type="l",ylim=c(-10000,15000),lwd=5, main="MLP Predict Cases per Tests & Vaccines")
+for (i in 1:20){
+    lines(fcstCOVID$all.mean[,i],col = "grey",type = "l")
+}
+lines(seq(396,416), tail(cases,21),type = "l",col="blue",lwd=5)
+
+
+plot(merged$case_count, type = "l")
 lines(seq(400,420),fcstCOVID$mean,col = "blue")
 
 
@@ -198,20 +209,19 @@ ASE_DEEP_LONG = mean((tail(cases,21) - fcstCOVID$mean)^2)
 ASE_DEEP_LONG
 RMSE_DEEP_LONG = sqrt(ASE_DEEP_LONG)
 RMSE_DEEP_LONG
+plot(fitCOVID)
 
 covidDataShort = ts(cases[1:409])
 fitCOVID_short = mlp(covidDataShort,xreg = covidX)
 fcstCOVID_short= forecast(fitCOVID_short,h=7,xreg = covidX)
-plot(merged$case_count, type = "l", main=ASE_long)
+plot(tail(merged$case_count,21), type = "l", ylim=c(-2000,10000))
+#plot(merged$case_count, type = "l", main=ASE_long)
 lines(seq(410,416),fcstCOVID_short$mean,col = "blue")
 
 ASE_DEEP_SHORT = mean((tail(cases,7) - fcstCOVID_short$mean)^2)
 ASE_DEEP_SHORT
 RMSE_DEEP_SHORT = sqrt(ASE_DEEP_SHORT)
 RMSE_DEEP_SHORT
-
-
-
 
 ```
 
@@ -220,8 +230,18 @@ What happens when we add another regressor?
 ```{r}
 covidData = ts(cases[1:395])
 covidXX = data.frame(testsTS = ts(tests), vaccinesTS = ts(vaccines), rec_mobility= ts(mobility))
+set.seed(2)
 fitCOVIDXX = mlp(covidData,xreg = covidXX)
+
 fcstCOVIDXX= forecast(fitCOVIDXX,h=21,xreg = covidXX)
+
+
+plot(fcstCOVIDXX$mean,type="l",ylim=c(-10000,15000),lwd=5, main="MLP Predict Cases per Vaccines, Tests and Park Mobility")
+for (i in 1:20){
+    lines(fcstCOVIDXX$all.mean[,i],col = "grey",type = "l")
+}
+lines(seq(396,416), tail(cases,21),type = "l",col="blue",lwd=5)
+
 
 plot(tail(merged$case_count,21), type = "l", ylim=c(-2000,10000))
 lines(seq(1,21),fcstCOVID$mean,col = "blue")
@@ -233,6 +253,15 @@ ASE_DEEP_LONG_XX
 RMSE_DEEP_LONG_XX = sqrt(ASE_DEEP_LONG_XX)
 RMSE_DEEP_LONG_XX
 plot(fitCOVIDXX)
+fitCOVIDXX
+
+ASE_DEEP_SHORT_XX = mean((tail(cases,21)[1:7] - fcstCOVIDXX$mean[1:7])^2)
+ASE_DEEP_SHORT_XX
+RMSE_DEEP_SHORT_XX = sqrt(ASE_DEEP_SHORT_XX)
+RMSE_DEEP_SHORT_XX
+
+
+
 ```
 
 
@@ -244,8 +273,10 @@ parks = mergedD$parks_percent_change_from_baseline
 
 covidData = ts(cases[1:395])
 covidXX = data.frame(testsTS = ts(tests), vaccinesTS = ts(vaccines), rec_mobility= ts(mobility))
+set.seed(2)
 fitCOVIDXX = mlp(covidData,xreg = covidXX)
 fcstCOVIDXX= forecast(fitCOVIDXX,h=21,xreg = covidXX)
+plot(fcstCOVIDXX)
 
 plot(tail(merged$case_count,21), type = "l", ylim=c(-2000,10000))
 lines(seq(1,21),fcstCOVID$mean,col = "blue")
@@ -264,7 +295,7 @@ RMSE_DEEP_LONG_XX
 parks = mergedD$parks_percent_change_from_baseline
 retail = mergedD$retail_and_recreation_percent_change_from_baseline
 
-covidData = ts(cases[1:395])
+covidData = ts(cases[1:395,2])
 covidXXX = data.frame(testsTS = ts(tests), vaccinesTS = ts(vaccines), rec_mobility= ts(mobility), retail_mobility= ts(retail))
 fitCOVIDXXX = mlp(covidData,xreg = covidXX)
 fcstCOVIDXXX= forecast(fitCOVIDXX,h=21,xreg = covidXX)
@@ -275,10 +306,12 @@ lines(seq(1,21),fcstCOVIDXX$mean,col = "red")
 lines(seq(1,21), zz, type = "l", col = "green")
 lines(seq(1,21),fcstCOVIDXXX$mean,col = "purple")
 
+
 ASE_DEEP_LONG_XXX = mean((tail(cases,21) - fcstCOVIDXXX$mean)^2)
 ASE_DEEP_LONG_XXX
 RMSE_DEEP_LONG_XXX = sqrt(ASE_DEEP_LONG_XXX)
 RMSE_DEEP_LONG_XXX
+
 ```
 
 
