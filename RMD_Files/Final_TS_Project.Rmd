@@ -1,0 +1,837 @@
+---
+title: "Final TS Covid Project"
+author: "Cameron Stewart and Ana Glaser"
+date: "11/27/2021"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: console
+---
+
+# Load Packages
+
+```{r message=F,warning=F}
+library(RCurl)
+library(tswge)
+library(nnfor)
+library(vars)
+library(tidyverse)
+library(lubridate)
+library(tseries)
+library(RColorBrewer)
+```
+
+# Defined Functions
+
+### Bring in peak finding function
+
+```{r}
+#Can also be used to find valleys if you put -x in instead of x for realization
+find_peaks <- function (x, m = 3){
+    shape <- diff(sign(diff(x, na.pad = FALSE)))
+    pks <- sapply(which(shape < 0), FUN = function(i){
+       z <- i - m + 1
+       z <- ifelse(z > 0, z, 1)
+       w <- i + m + 1
+       w <- ifelse(w < length(x), w, length(x))
+       if(all(x[c(z : i, (i + 2) : w)] <= x[i + 1])) return(i + 1) else return(numeric(0))
+    })
+     pks <- unlist(pks)
+     pks
+}
+```
+
+### Bring in valley finding function
+
+```{r}
+find_valleys <- function (x, m = 3){
+    x=-x
+    shape <- diff(sign(diff(x, na.pad = FALSE)))
+    pks <- sapply(which(shape < 0), FUN = function(i){
+       z <- i - m + 1
+       z <- ifelse(z > 0, z, 1)
+       w <- i + m + 1
+       w <- ifelse(w < length(x), w, length(x))
+       if(all(x[c(z : i, (i + 2) : w)] <= x[i + 1])) return(i + 1) else return(numeric(0))
+    })
+     pks <- unlist(pks)
+     pks
+}
+```
+
+### Bring in rolling window ASE function
+
+```{r}
+Rolling_Window_ASE = function(series, trainingSize, horizon = 1, s = 0, d = 0, phis = 0, thetas = 0)
+{
+ASEHolder = numeric()
+
+for( i in 1:(length(series)-(trainingSize + horizon) + 1))
+{
+  
+  forecasts = fore.aruma.wge(series[i:(i+(trainingSize-1))],phi = phis, theta = thetas, s = s, d = d,n.ahead = horizon)
+  
+  ASE = mean((series[(trainingSize+i):(trainingSize+ i + (horizon) - 1)] - forecasts$f)^2)
+         
+  ASEHolder[i] = ASE
+
+}
+
+ASEHolder
+hist(ASEHolder)
+WindowedASE = mean(ASEHolder)
+
+print("The Summary Statistics for the Rolling Window ASE Are:")
+print(summary(ASEHolder))
+print(paste("The Rolling Window ASE is: ",WindowedASE))
+return(WindowedASE)
+}
+```
+
+# Summarized EDA
+
+### Read in the data set data types
+
+```{r}
+covid <- read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/merged_data.csv"))
+covid$Date=mdy(covid$Date)
+str(covid)
+summary(covid)
+
+cases=read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/Texas%20COVID-19%20Case%20Count%20Data%20by%20County.csv"))
+cases$Date=mdy(cases$Date)
+cases$Case.Count=c(NA,diff(cases$Case.Count))
+cases=cases[2:length(cases$Date),]
+str(cases)
+```
+
+### Plot reduced and full data and check for consistent covariance
+
+```{r}
+plotts.sample.wge(covid$case_count,lag.max = 100,trunc = 35)
+plotts.sample.wge(cases$Case.Count,lag.max = 40,trunc = 35)
+
+acf(cases$Case.Count[1:(length(cases$Case.Count)/2)],lag.max = 40)
+acf(cases$Case.Count[(length(cases$Case.Count)/2+1):length(cases$Case.Count)],lag.max = 40)
+
+acf(covid$case_count[1:(length(covid$case_count)/2)],lag.max = 60)
+acf(covid$case_count[(length(covid$case_count)/2+1):length(covid$case_count)],lag.max = 60)
+```
+
+### Assume you remove seasonality first
+
+```{r}
+fcases_s7=artrans.wge(cases$Case.Count,phi.tr = c(rep(0,6),1),lag.max = 30)
+pcases_s7=artrans.wge(covid$case_count,phi.tr = c(rep(0,6),1),lag.max = 60)
+
+#Dicky-Fuller Test shows d=1 does not belong in the data after adding s=7
+adf.test(fcases_s7)
+
+#We can see the remaining data is not white noise from the ACF
+full_s7=plotts.sample.wge(fcases_s7,lag.max = 50,arlimits = T)
+
+#Use overfit to detect any additional seasonality, none found
+factor.wge(phi = c(rep(0,6),1))
+est.ar.wge(fcases_s7,p = 17,type = "burg")[0]
+
+
+#Show there is white noise remaining (p=0 so null is rejected)
+ljung.wge(fcases_s7,K = 24)$pval
+ljung.wge(fcases_s7,K = 48)$pval
+
+
+#Use aic5 to find remaining correlation
+acf(fcases_s7,lag.max = 60)
+pacf(fcases_s7,lag.max = 60)
+
+# aic5.wge(x = fcases_s7,p = 11:20,q = 4:9,type = 'bic')
+# aic5.wge(x = fcases_s7,p = 2,q = 9:14,type = 'aic')
+
+#Models based on full data
+est_fcases_s7p21q8=est.arma.wge(fcases_s7,p = 21,q=8)
+
+#Run ljung test with autocrrelation
+plotts.sample.wge(est_fcases_s7p21q8$res,lag.max = 40,arlimits = T)
+acf(est_fcases_s7p21q8$res,lag.max = 50)
+pacf(est_fcases_s7p21q8$res,lag.max = 60)
+ljung.wge(x = est_fcases_s7p21q8$res,K = 24,p = 2,q = 8)
+ljung.wge(x = est_fcases_s7p21q8$res,K = 48,p = 2,q = 8)
+
+#Identify Rolling Window ASE for short term forecast
+#Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,s = 7,phis = est_fcases_s7p21q8$phi,thetas = est_fcases_s7p21q8$theta,trainingSize = 60)
+
+#Identify Rolling Window ASE for long term forecast
+#Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,s = 7,phis = est_fcases_s7p21q8$phi,thetas = est_fcases_s7p21q8$theta,trainingSize = 60)
+```
+
+### Assume it has no seasonality
+```{r}
+fcases_d1=artrans.wge(covid$case_count,phi.tr = c(1),lag.max = 40)
+pcases_d1=artrans.wge(cases$Case.Count,phi.tr = c(1),lag.max = 40)
+
+#Dicky-Fuller Test shows another d=1 does not belong in the data
+adf.test(fcases_d1)
+
+#We can see the remaining data is not white noise from the ACF
+full_s7=plotts.sample.wge(fcases_d1,lag.max = 50,arlimits = T)
+
+#Use overfit to detect any additional seasonality, none found
+factor.wge(phi = c(rep(0,2),1))
+est.ar.wge(fcases_d1,p = 17,type = "burg")[0]
+
+#Show there is white noise remaining (p=0 so null is rejected)
+ljung.wge(fcases_d1,K = 24)$pval
+ljung.wge(fcases_d1,K = 48)$pval
+
+#Use aic5 to find remaining correlation
+acf(fcases_d1,lag.max = 60)
+pacf(fcases_d1,lag.max = 60)
+
+#aic5.wge(x = fcases_d1,p = 25:30,q = 10:15,type = 'aic')
+
+#Models based on full data
+est_fcases_d1p6q14=est.arma.wge(fcases_d1,p = 6,q=14)
+
+#Run ljung test with autocrrelation
+plotts.sample.wge(est_fcases_d1p6q14$res,lag.max = 40,arlimits = T)
+acf(est_fcases_d1p6q14$res,lag.max = 60)
+pacf(est_fcases_d1p6q14$res,lag.max = 60)
+ljung.wge(x = est_fcases_d1p6q14$res,K = 24,p = 2,q = 8)
+ljung.wge(x = est_fcases_d1p6q14$res,K = 48,p = 2,q = 8)
+
+#Identify Rolling Window ASE for short term forecast
+#Rolling_Window_ASE(series = cases$Case.Count,horizon = 7,d = 1,phis = est_fcases_d1p6q14$phi,thetas = est_fcases_d1p6q14$theta,trainingSize = 60)
+
+#Identify Rolling Window ASE for long term forecast
+#Rolling_Window_ASE(series = cases$Case.Count,horizon = 21,d = 1,phis = est_fcases_d1p6q14$phi,thetas = est_fcases_d1p6q14$theta,trainingSize = 60)
+```
+
+### Generate examples from models selected
+
+```{r}
+#Original Realization
+plotts.wge(cases$Case.Count)
+
+#Generated ARIMA(21,0,8)
+plotts.wge(gen.aruma.wge(600,phi = est_fcases_s7p21q8$phi,theta =  est_fcases_s7p21q8$theta,s = 7,vara = est_fcases_s7p21q8$avar,sn = 25300))
+
+#Generated ARIMA(6,1,14)
+plotts.wge(gen.aruma.wge(600,phi = est_fcases_d1p6q14$phi,theta =  est_fcases_d1p6q14$theta,d = 1,vara = est_fcases_d1p6q14$avar,sn = 60))
+```
+
+# Start Part 2 of Analysis
+
+### Read in the data set
+```{r}
+covid <- read.csv(text=getURL("https://raw.githubusercontent.com/C-Stewart-GH/Time_Series_Project/main/Raw_Data_Files/merged_data.csv"))
+covid$Date=mdy(covid$Date)
+str(covid)
+summary(covid)
+```
+
+### Visualize full data and create mean mobility
+```{r}
+str(covid)
+names(covid)
+covid$mobility_mean=rowMeans(x = covid[,c(4:9)],dims = 1)
+plotts.sample.wge(covid$case_count)
+plotts.sample.wge(covid$tests_taken)
+plotts.sample.wge(covid$vaccine_doses_administered)
+plotts.sample.wge(covid$retail_and_recreation_percent_change_from_baseline)
+plotts.sample.wge(covid$grocery_and_pharmacy_percent_change_from_baseline)
+plotts.sample.wge(covid$parks_percent_change_from_baseline)
+plotts.sample.wge(covid$transit_stations_percent_change_from_baseline)
+plotts.sample.wge(covid$workplaces_percent_change_from_baseline)
+plotts.sample.wge(covid$residential_percent_change_from_baseline)
+plotts.sample.wge(covid$mobility_mean)
+```
+
+### Look at cross correlation of each variable
+```{r}
+par(mfrow=c(1,1))
+covid_d1=artrans.wge(covid$case_count,1)
+covid_d1s7=artrans.wge(covid_d1,c(rep(0,6),1))
+Ccf(covid_d1,artrans.wge(covid$tests_taken,c(1)),lag.max = 40) #Differenced Lag 4
+Ccf(covid_d1,artrans.wge(covid$vaccine_doses_administered,c(1)),lag.max = 40) #Seasonal trend remaining
+Ccf(covid_d1,artrans.wge(artrans.wge(covid$vaccine_doses_administered,c(1)),c(rep(0,6),1)),lag.max = 40) #Diff and Seas Lag 19
+Ccf(covid_d1,artrans.wge(covid$retail_and_recreation_percent_change_from_baseline,c(rep(0,6),1)),lag.max = 40) #Lag 1
+Ccf(covid_d1,artrans.wge(covid$grocery_and_pharmacy_percent_change_from_baseline,c(rep(0,6),1)),lag.max = 40) #Lag 1
+Ccf(covid_d1,artrans.wge(covid$parks_percent_change_from_baseline,c(rep(0,6),1)),lag.max = 40) #Insignificant
+Ccf(covid_d1,artrans.wge(covid$transit_stations_percent_change_from_baseline,c(rep(0,6),1)),lag.max = 40) #Lag 1
+Ccf(covid_d1,artrans.wge(covid$workplaces_percent_change_from_baseline,c(rep(0,6),1)),lag.max = 40) #Lag 0/ Lag 1
+Ccf(covid_d1,artrans.wge(covid$residential_percent_change_from_baseline,c(rep(0,6),1)),lag.max = 40) #Lag -1,0,1
+Ccf(covid_d1,artrans.wge(covid$mobility_mean,c(rep(0,6),1)),lag.max = 40) #Lag -1
+```
+
+### Create VAR Model
+```{r}
+#Create first differenced data set and reduce attributes
+covid_d1=covid[,2:dim(covid)[2]]
+for (i in c(1:(dim(covid)[2]-1))){
+  covid_d1[,i]=c(NA,artrans.wge(x = covid_d1[,i],1))
+}
+names(covid_d1)
+str(covid)
+str(covid_d1)
+covid_d1=covid_d1[2:dim(covid_d1)[1],c(1,2,9,10)]
+
+#Create reduced variable covid data set to mob mean, vax, test count, and case count
+names(covid)
+covid_reduced=covid[,c(2,3,10,11)]
+
+#Test original data set
+VARselect(covid_reduced,lag.max = 45,type = 'const')
+  #AIC 8, BIC 8
+
+#Fit based on AIC
+fit1a=VAR(covid_reduced,p=8,type="const")
+summary(fit1a)
+preds=predict(fit1a,n.ahead=21)
+par(mfrow=c(1,1))
+
+#Fan charts
+fanchart(preds, colors = brewer.pal(n = 8, name = "Blues"))
+
+#Entire Plot
+plot(seq(1,dim(covid_reduced)[1],1),covid_reduced$case_count, type = "l")
+lines(seq((dim(covid_reduced)[1]-20),dim(covid_reduced)[1],1),preds$fcst$case_count[,1],type = "l",col='blue')
+
+#Visualize only forecasted points
+plot(tail(covid_reduced$case_count,21), type = "l")
+lines(preds$fcst$case_count[,1],type = "l",col='blue')
+
+short_ASE_fit1a = mean((tail(covid_reduced$case_count,21)[1:7]-preds$fcst$case_count[1:7,1])^2) 
+short_ASE_fit1a
+short_ASE_fit1a^.5
+#7 Day RMSE of 1763.7 which is much lower than the 2981 from our ARIMA(6,1,14) model
+#Maybe try to look up rolling window version
+
+long_ASE_fit1a = mean((tail(covid_reduced$case_count,21)-preds$fcst$case_count[,1])^2) 
+long_ASE_fit1a
+long_ASE_fit1a^.5
+#RMSE of 1326.6 which is much lower than the 3806 from our ARIMA(6,1,14) model
+#Maybe try to look up rolling window version
+
+#Fit based on BIC
+#Same
+
+#Test just a seasonal data set
+VARselect(covid_reduced,lag.max = 25,type = 'const',season = 7)
+  #AIC 8, BIC 2
+
+#Fit based on AIC
+fit2a=VAR(covid_reduced,p=8,type="const",season = 7)
+summary(fit2a)
+preds=predict(fit2a,n.ahead=21)
+par(mfrow=c(1,1))
+
+#Fan charts
+fanchart(preds, colors = brewer.pal(n = 8, name = "Blues"))
+
+#Entire Plot
+plot(seq(1,dim(covid_reduced)[1],1),covid_reduced$case_count, type = "l")
+lines(seq((dim(covid_reduced)[1]-20),dim(covid_reduced)[1],1),preds$fcst$case_count[,1],type = "l",col='blue')
+
+#Visualize only forecasted points
+plot(tail(covid_reduced$case_count,21), type = "l",ylim=c(400,5900))
+lines(preds$fcst$case_count[,1],type = "l",col='blue')
+
+short_ASE_fit2a = mean((tail(covid_reduced$case_count,21)[1:7]-preds$fcst$case_count[1:7,1])^2) 
+short_ASE_fit2a
+short_ASE_fit2a^.5
+#7 Day RMSE of 2066.2 which is much lower than the 2981 from our ARIMA(6,1,14) model but higher than fit 1a
+#Maybe try to look up rolling window version
+
+long_ASE_fit2a = mean((tail(covid_reduced$case_count,21)-preds$fcst$case_count[,1])^2) 
+long_ASE_fit2a
+long_ASE_fit2a^.5
+#21 Day RMSE of 1522.145 which is much lower than the 3806 from our ARIMA(6,1,14) model but higher than fit 1a
+#Maybe try to look up rolling window version
+
+#Fit based on BIC
+fit2b=VAR(covid_reduced,p=2,type="const",season = 7)
+summary(fit2b)
+preds=predict(fit2b,n.ahead=21)
+par(mfrow=c(1,1))
+
+#Fan charts
+fanchart(preds, colors = brewer.pal(n = 8, name = "Blues"))
+
+#Entire Plot
+plot(seq(1,dim(covid_reduced)[1],1),covid_reduced$case_count, type = "l")
+lines(seq((dim(covid_reduced)[1]-20),dim(covid_reduced)[1],1),preds$fcst$case_count[,1],type = "l",col='blue')
+
+#Visualize only forecasted points
+plot(tail(covid_reduced$case_count,21), type = "l",ylim=c(400,5900))
+lines(preds$fcst$case_count[,1],type = "l",col='blue')
+
+short_ASE_fit2b = mean((tail(covid_reduced$case_count,21)[1:7]-preds$fcst$case_count[1:7,1])^2) 
+short_ASE_fit2b
+short_ASE_fit2b^.5
+#7 Day RMSE of 1595.7 which is much lower than the 2981 from our ARIMA(6,1,14) model and higher than fit 1a
+#Maybe try to look up rolling window version
+
+long_ASE_fit2b = mean((tail(covid_reduced$case_count,21)-preds$fcst$case_count[,1])^2) 
+long_ASE_fit2b
+long_ASE_fit2b^.5
+#21 Day RMSE of 2635.8 which is much lower than the 3806 from our ARIMA(6,1,14) model but higher than fit 1a
+#Maybe try to look up rolling window version
+
+#Test a first differenced data set
+VARselect(covid_d1,lag.max = 25,type = 'const')
+  #AIC 7, BIC 7
+
+#Fit based on AIC
+fit3a=VAR(covid_d1,p=7,type="const")
+summary(fit3a)
+preds=predict(fit3a,n.ahead=21)
+par(mfrow=c(1,1))
+
+#Fan charts
+fanchart(preds, colors = brewer.pal(n = 8, name = "Blues"))
+
+#Entire Plot
+plot(seq(1,dim(covid_d1)[1],1),covid_d1$case_count, type = "l")
+lines(seq((dim(covid_d1)[1]-20),dim(covid_d1)[1],1),preds$fcst$case_count[,1],type = "l",col='blue')
+
+
+#Visualize only forecasted points
+plot(tail(covid_d1$case_count,21), type = "l",ylim=c(min(preds$fcst$case_count[,2]),max(preds$fcst$case_count[,3])))
+lines(preds$fcst$case_count[,1],type = "l",col='blue')
+lines(preds$fcst$case_count[,2],type = "l",col='blue', lty=2)
+lines(preds$fcst$case_count[,3],type = "l",col='blue', lty=2)
+
+short_ASE_fit3a = mean((tail(covid_d1$case_count,21)[1:7]-preds$fcst$case_count[1:7,1])^2) 
+short_ASE_fit3a
+short_ASE_fit3a^.5
+#7 Day RMSE of 1278.8 which is second lowest short term RMSE
+#Maybe try to look up rolling window version
+
+long_ASE_fit3a = mean((tail(covid_d1$case_count,21)-preds$fcst$case_count[,1])^2) 
+long_ASE_fit3a
+long_ASE_fit3a^.5
+#21 Day RMSE of 974.3 which is much lower than the 3806 from our ARIMA(6,1,14) model and lowest long term VAR model
+#Maybe try to look up rolling window version
+
+#Test a first differenced and seasonal data set
+VARselect(covid_d1,lag.max = 25,type = 'const',season = 7)
+  #AIC 7, BIC 7
+
+#Fit based on AIC
+fit4a=VAR(covid_d1,p=7,type="const",season = 7)
+summary(fit4a)
+preds=predict(fit4a,n.ahead=21)
+par(mfrow=c(1,1))
+
+#Fan charts
+fanchart(preds, colors = brewer.pal(n = 8, name = "Blues"))
+
+#Entire Plot
+plot(seq(1,dim(covid_d1)[1],1),covid_d1$case_count, type = "l")
+lines(seq((dim(covid_d1)[1]-20),dim(covid_d1)[1],1),preds$fcst$case_count[,1],type = "l",col='blue')
+
+#Visualize only forecasted points
+plot(tail(covid_d1$case_count,21), type = "l",ylim=c(-3900,4600))
+lines(preds$fcst$case_count[,1],type = "l",col='blue')
+
+short_ASE_fit4a = mean((tail(covid_d1$case_count,21)[1:7]-preds$fcst$case_count[1:7,1])^2) 
+short_ASE_fit4a
+short_ASE_fit4a^.5
+#7 Day RMSE of 1143.2 which is lowest short term RMSE
+#Maybe try to look up rolling window version
+
+long_ASE_fit4a = mean((tail(covid_d1$case_count,21)-preds$fcst$case_count[,1])^2) 
+long_ASE_fit4a
+long_ASE_fit4a^.5
+#21 Day RMSE of 1185.6 which is much lower than the 3806 from our ARIMA(6,1,14) model and second lowest model
+#Maybe try to look up rolling window version
+
+#Create first different response only data set
+names(covid_reduced)
+cases_d1=artrans.wge(covid_reduced$case_count,1)
+covid_reduced_cases_d1=covid_reduced
+covid_reduced_cases_d1$case_count_d1=c(NA,cases_d1)
+names(covid_reduced_cases_d1)
+covid_reduced_cases_d1=covid_reduced_cases_d1[2:dim(covid_reduced_cases_d1)[1],c(1,3,4,5)]
+str(covid_reduced_cases_d1)
+
+#Test a first differenced cases only without seasonality
+VARselect(covid_reduced_cases_d1,lag.max = 25,type = 'const')
+  #AIC 8, BIC 8
+
+#Fit based on AIC
+fit5a=VAR(covid_reduced_cases_d1,p=8,type="const")
+summary(fit5a)
+preds=predict(fit5a,n.ahead=21)
+par(mfrow=c(1,1))
+
+#Fan charts
+fanchart(preds, colors = brewer.pal(n = 8, name = "Blues"))
+
+#Entire Plot
+plot(seq(1,dim(covid_reduced_cases_d1)[1],1),covid_reduced_cases_d1$case_count, type = "l")
+lines(seq((dim(covid_reduced_cases_d1)[1]-20),dim(covid_reduced_cases_d1)[1],1),preds$fcst$case_count[,1],type = "l",col='blue')
+
+#Visualize only forecasted points
+plot(tail(covid_reduced_cases_d1$case_count,21), type = "l",ylim=c(-3900,4600))
+lines(preds$fcst$case_count[,1],type = "l",col='blue')
+
+short_ASE_fit5a = mean((tail(covid_reduced_cases_d1$case_count,21)[1:7]-preds$fcst$case_count[1:7,1])^2) 
+short_ASE_fit5a
+short_ASE_fit5a^.5
+#7 Day RMSE of 1300.18
+#Maybe try to look up rolling window version
+
+long_ASE_fit5a = mean((tail(covid_reduced_cases_d1$case_count,21)-preds$fcst$case_count[,1])^2) 
+long_ASE_fit5a
+long_ASE_fit5a^.5
+#21 Day RMSE of 994.35 which is much lower than the 3806 from our ARIMA(6,1,14) model and lowest RMSE
+
+#Test a first differenced cases only with seasonality
+VARselect(covid_reduced_cases_d1,lag.max = 25,type = 'const',season = 7)
+  #AIC 8, BIC 8
+
+#Fit based on AIC
+fit6a=VAR(covid_reduced_cases_d1,p=8,type="const",season = 7)
+summary(fit6a)
+preds=predict(fit6a,n.ahead=21)
+par(mfrow=c(1,1))
+
+#Fan charts
+fanchart(preds, colors = brewer.pal(n = 8, name = "Blues"))
+
+#Entire Plot
+plot(seq(1,dim(covid_reduced_cases_d1)[1],1),covid_reduced_cases_d1$case_count, type = "l")
+lines(seq((dim(covid_reduced_cases_d1)[1]-20),dim(covid_reduced_cases_d1)[1],1),preds$fcst$case_count[,1],type = "l",col='blue')
+
+#Visualize only forecasted points
+plot(tail(covid_reduced_cases_d1$case_count,21), type = "l",ylim=c(min(preds$fcst$case_count[,2]),12100))
+lines(preds$fcst$case_count[,1],type = "l",col='blue')
+lines(preds$fcst$case_count[,2],type = "l",col='blue',lty=2)
+lines(preds$fcst$case_count[,3],type = "l",col='blue',lty=2)
+
+short_ASE_fit6a = mean((tail(covid_reduced_cases_d1$case_count,21)[1:7]-preds$fcst$case_count[1:7,1])^2) 
+short_ASE_fit6a
+short_ASE_fit6a^.5
+#7 Day RMSE of 1135.7
+#Maybe try to look up rolling window version
+
+long_ASE_fit6a = mean((tail(covid_reduced_cases_d1$case_count,21)-preds$fcst$case_count[,1])^2) 
+long_ASE_fit6a
+long_ASE_fit6a^.5
+#21 Day RMSE of 1116.739 which is much lower than the 3806 from our ARIMA(6,1,14) model and lowest RMSE
+```
+
+### Summarize VAR results
+```{r}
+#Minimize Short 7 Day Forecast RMSE selects model fit6a (diff response with seasonality and lag of 8) - RMSE of 1135.75
+(short_ASE_fit1a)^.5
+(short_ASE_fit2a)^.5
+(short_ASE_fit2b)^.5
+(short_ASE_fit3a)^.5
+(short_ASE_fit4a)^.5
+(short_ASE_fit5a)^.5
+(short_ASE_fit6a)^.5
+min(short_ASE_fit1a,short_ASE_fit2a,short_ASE_fit2b,short_ASE_fit3a,short_ASE_fit4a,short_ASE_fit5a,short_ASE_fit6a)^.5
+
+#Minimize Long 21 Day Forecast RMSE selects model fit3a (diff all data without seasonality lag of 8) - RMSE of 974.29
+(long_ASE_fit1a)^.5
+(long_ASE_fit2a)^.5
+(long_ASE_fit2b)^.5
+(long_ASE_fit3a)^.5
+(long_ASE_fit4a)^.5
+(long_ASE_fit5a)^.5
+(long_ASE_fit6a)^.5
+min(long_ASE_fit1a,long_ASE_fit2a,long_ASE_fit2b,long_ASE_fit3a,long_ASE_fit4a,long_ASE_fit5a,long_ASE_fit6a)^.5
+
+#Minimize Short 7 Day Forecast AIC selects model fit6a (diff response with seasonality and lag of 8) - AIC of 7659
+AIC(fit1a$varresult$case_count)
+AIC(fit2a$varresult$case_count)
+AIC(fit2b$varresult$case_count)
+AIC(fit3a$varresult$case_count)
+AIC(fit4a$varresult$case_count)
+AIC(fit5a$varresult$case_count)
+AIC(fit6a$varresult$case_count)
+
+#Minimize Short 7 Day Forecast BIC selects model fit6a (diff response with seasonality and lag of 8) - BIC of 7819
+BIC(fit1a$varresult$case_count)
+BIC(fit2a$varresult$case_count)
+BIC(fit2b$varresult$case_count)
+BIC(fit3a$varresult$case_count)
+BIC(fit4a$varresult$case_count)
+BIC(fit5a$varresult$case_count)
+BIC(fit6a$varresult$case_count)
+```
+
+### Create MLP models
+```{r}
+###MLP with reduced original data
+
+#Create train and whole ts set
+covid_reduced_train=covid_reduced[1:(dim(covid_reduced)[1]-21),]
+
+covid_reduced_train$case_count <- ts(covid_reduced_train$case_count, start = decimal_date(as.Date("2020-09-14")), frequency = 365)
+covid_reduced_train$tests_taken <- ts(covid_reduced_train$tests_taken, start = decimal_date(as.Date("2020-09-14")), frequency = 365)
+covid_reduced_train$vaccine_doses_administered <- ts(covid_reduced_train$vaccine_doses_administered, start = decimal_date(as.Date("2020-09-14")), frequency = 365)
+covid_reduced_train$mobility_mean <- ts(covid_reduced_train$mobility_mean, start = decimal_date(as.Date("2020-09-14")), frequency = 365)
+
+covid_reduced_ts=covid_reduced
+
+covid_reduced_ts$case_count <- ts(covid_reduced_ts$case_count, start = decimal_date(as.Date("2020-09-14")), frequency = 365)
+covid_reduced_ts$tests_taken <- ts(covid_reduced_ts$tests_taken, start = decimal_date(as.Date("2020-09-14")), frequency = 365)
+covid_reduced_ts$vaccine_doses_administered <- ts(covid_reduced_ts$vaccine_doses_administered, start = decimal_date(as.Date("2020-09-14")), frequency = 365)
+covid_reduced_ts$mobility_mean <- ts(covid_reduced_ts$mobility_mean, start = decimal_date(as.Date("2020-09-14")), frequency = 365)
+
+#Fit model and forecast
+set.seed(2)
+fit_mlp1 = mlp(y = covid_reduced_train$case_count,xreg = covid_reduced_train[,c(1,3,4)],hd.auto.type = 'cv',reps =  30,comb = 'median',allow.det.season = T)
+fit_mlp1
+plot(fit_mlp1)
+
+short_f_mlp1 = forecast(fit_mlp1, h = 7, xreg = covid_reduced_ts[,c(1,3,4)])
+plot(short_f_mlp1,xlim=c(2021.7,2022))
+plot(seq(1,7),tail(covid_reduced_ts$case_count,21)[1:7],type = "l",ylim=c(-4800,12000)) 
+lines(seq(1,7),short_f_mlp1$mean, col = "blue",type= 'l')
+short_ASE_fit_mlp1 = mean((tail(covid_reduced_ts$case_count,21)[1:7]-short_f_mlp1$mean)^2) 
+short_ASE_fit_mlp1^.5
+#RMSE of 3698
+
+long_f_mlp1 = forecast(fit_mlp1, h = 21, xreg = covid_reduced_ts[,c(1,3,4)],level=c(95))
+
+plot(long_f_mlp1,xlim=c(2021.7,2022))
+
+
+plot(long_f_mlp1$mean,type='l',ylim=c(-20000,20000),lwd=5)
+for (i in 1:20){
+    lines(long_f_mlp1$all.mean[,i],col = 'grey',type = 'l')
+}
+lines(tail(covid_reduced_ts$case_count,21),type = "l",col='blue',lwd=5)
+
+
+plot(seq(1,21),tail(covid_reduced_ts$case_count,21),type = "l",ylim=c(-6500,12000)) 
+lines(seq(1,21),long_f_mlp1$mean, col = "blue",type= 'l')
+long_ASE_fit_mlp1 = mean((tail(covid_reduced_ts$case_count,21)-long_f_mlp1$mean)^2) 
+long_ASE_fit_mlp1^.5
+#RMSE 4795
+
+###Use differenced repsonse set
+
+#Create train and whole ts set
+covid_reduced_cases_d1_train=covid_reduced_cases_d1[1:(dim(covid_reduced_cases_d1)[1]-21),]
+
+covid_reduced_cases_d1_train$case_count_d1 <- ts(covid_reduced_cases_d1_train$case_count_d1, start = decimal_date(as.Date("2020-09-15")), frequency = 365)
+covid_reduced_cases_d1_train$tests_taken <- ts(covid_reduced_cases_d1_train$tests_taken, start = decimal_date(as.Date("2020-09-15")), frequency = 365)
+covid_reduced_cases_d1_train$vaccine_doses_administered <- ts(covid_reduced_cases_d1_train$vaccine_doses_administered, start = decimal_date(as.Date("2020-09-15")), frequency = 365)
+covid_reduced_cases_d1_train$mobility_mean <- ts(covid_reduced_cases_d1_train$mobility_mean, start = decimal_date(as.Date("2020-09-15")), frequency = 365)
+
+covid_reduced_cases_d1_ts=covid_reduced_cases_d1
+
+covid_reduced_cases_d1_ts$case_count_d1 <- ts(covid_reduced_cases_d1_ts$case_count_d1, start = decimal_date(as.Date("2020-09-15")), frequency = 365)
+covid_reduced_cases_d1_ts$tests_taken <- ts(covid_reduced_cases_d1_ts$tests_taken, start = decimal_date(as.Date("2020-09-15")), frequency = 365)
+covid_reduced_cases_d1_ts$vaccine_doses_administered <- ts(covid_reduced_cases_d1_ts$vaccine_doses_administered, start = decimal_date(as.Date("2020-09-15")), frequency = 365)
+covid_reduced_cases_d1_ts$mobility_mean <- ts(covid_reduced_cases_d1_ts$mobility_mean, start = decimal_date(as.Date("2020-09-15")), frequency = 365)
+
+#Fit model and forecast
+set.seed(2)
+fit_mlp2 = mlp(y = covid_reduced_cases_d1_train$case_count_d1,xreg = covid_reduced_cases_d1_train[,c(1,2,3)],hd.auto.type = 'cv',reps =  30,comb = 'median',allow.det.season = T)
+fit_mlp2
+plot(fit_mlp2)
+
+short_f_mlp2 = forecast(fit_mlp2, h = 7, xreg = covid_reduced_cases_d1_ts[,c(1,2,3)])
+plot(short_f_mlp2,xlim=c(2021.7,2022))
+plot(seq(1,7),tail(covid_reduced_cases_d1_ts$case_count_d1,21)[1:7],type = "l",ylim=c(-4800,12000)) 
+lines(seq(1,7),short_f_mlp2$mean, col = "blue",type= 'l')
+short_ASE_fit_mlp2 = mean((tail(covid_reduced_cases_d1_ts$case_count_d1,21)[1:7]-short_f_mlp2$mean)^2) 
+short_ASE_fit_mlp2^.5
+#RMSE of 2760
+
+long_f_mlp2 = forecast(fit_mlp2, h = 21, xreg = covid_reduced_cases_d1_ts[,c(1,2,3)])
+plot(long_f_mlp2,xlim=c(2021.7,2022))
+plot(seq(1,21),tail(covid_reduced_cases_d1_ts$case_count_d1,21),type = "l",ylim=c(-6500,12000)) 
+lines(seq(1,21),long_f_mlp2$mean, col = "blue",type= 'l')
+long_ASE_fit_mlp2 = mean((tail(covid_reduced_cases_d1_ts$case_count_d1,21)-long_f_mlp2$mean)^2) 
+long_ASE_fit_mlp2^.5
+#RMSE 5788
+
+#Selected MLP Model1
+covidData = ts(covid$case_count[1:395])
+covidXX = data.frame(testsTS = ts(covid$tests_taken[1:395]), vaccinesTS = ts(covid$vaccine_doses_administered[1:395]), park_mobility= ts(covid$parks_percent_change_from_baseline[1:395]))
+covidXX_full = data.frame(testsTS = ts(covid$tests_taken), vaccinesTS = ts(covid$vaccine_doses_administered), park_mobility= ts(covid$parks_percent_change_from_baseline))
+set.seed(2)
+fitCOVIDXX = mlp(covidData,xreg = covidXX)
+fcstCOVIDXX= forecast(fitCOVIDXX,h=21,xreg = covidXX_full)
+
+plot(seq(1,21),fcstCOVIDXX$mean,type='l',ylim=c(-20000,20000),lwd=5)
+for (i in 1:20){
+    lines(seq(1,21),fcstCOVIDXX$all.mean[,i],col = 'grey',type = 'l')
+}
+lines(tail(covid$case_count,21),type = "l",col='blue',lwd=5)
+
+plot(seq(1,21),fcstCOVIDXX$mean,type='l',ylim=c(-20000,20000),lwd=5)
+lines(seq(1,21),fcstCOVIDXX$mean,col = "red")
+
+
+ASE_DEEP_SHORT_XX = mean((tail(covid$case_count,21)[1:7] - fcstCOVIDXX$mean[1:7])^2)
+ASE_DEEP_SHORT_XX
+RMSE_DEEP_SHORT_XX = sqrt(ASE_DEEP_SHORT_XX)
+RMSE_DEEP_SHORT_XX
+
+ASE_DEEP_LONG_XX = mean((tail(covid$case_count,21) - fcstCOVIDXX$mean)^2)
+ASE_DEEP_LONG_XX
+RMSE_DEEP_LONG_XX = sqrt(ASE_DEEP_LONG_XX)
+RMSE_DEEP_LONG_XX
+
+#Selected MLP Model2
+covidData = ts(covid$case_count[1:395])
+covidXX2 = data.frame(testsTS = ts(covid$tests_taken[1:395]), vaccinesTS = ts(covid$vaccine_doses_administered[1:395]))
+covidXX_full2 = data.frame(testsTS = ts(covid$tests_taken), vaccinesTS = ts(covid$vaccine_doses_administered))
+set.seed(2)
+fitCOVIDXX2 = mlp(covidData,xreg = covidXX2)
+fcstCOVIDXX2= forecast(fitCOVIDXX2,h=21,xreg = covidXX_full2)
+
+plot(seq(1,21),fcstCOVIDXX2$mean,type='l',ylim=c(-20000,20000),lwd=5)
+for (i in 1:20){
+    lines(seq(1,21),fcstCOVIDXX2$all.mean[,i],col = 'grey',type = 'l')
+}
+lines(tail(covid$case_count,21),type = "l",col='blue',lwd=5)
+
+plot(seq(1,21),fcstCOVIDXX2$mean,type='l',ylim=c(-20000,20000),lwd=5)
+lines(seq(1,21),fcstCOVIDXX2$mean,col = "red")
+
+ASE_DEEP_SHORT_XX2 = mean((tail(covid$case_count,21)[1:7] - fcstCOVIDXX2$mean[1:7])^2)
+ASE_DEEP_SHORT_XX2
+RMSE_DEEP_SHORT_XX2 = sqrt(ASE_DEEP_SHORT_XX2)
+RMSE_DEEP_SHORT_XX2
+
+ASE_DEEP_LONG_XX2 = mean((tail(covid$case_count,21) - fcstCOVIDXX2$mean)^2)
+ASE_DEEP_LONG_XX2
+RMSE_DEEP_LONG_XX2 = sqrt(ASE_DEEP_LONG_XX2)
+RMSE_DEEP_LONG_XX2
+```
+
+### MLP RMSE Summary
+```{r}
+(short_ASE_fit_mlp1)^.5
+(short_ASE_fit_mlp2)^.5
+
+(long_ASE_fit_mlp1)^.5
+(long_ASE_fit_mlp2)^.5
+
+RMSE_DEEP_SHORT_XX #Selected Model For Ensemble
+RMSE_DEEP_LONG_XX #Selected Model For Ensemble
+
+RMSE_DEEP_SHORT_XX2
+RMSE_DEEP_LONG_XX2
+```
+
+### Selected MLP/VAR Models and Ensemble Model
+```{r}
+#Selected VAR Model
+#Fit based on AIC
+fit6a=VAR(covid_reduced_cases_d1,p=8,type="const",season = 7)
+summary(fit6a)
+preds_6a=predict(fit6a,n.ahead=21)
+par(mfrow=c(1,1))
+
+#Fan charts
+fanchart(preds_6a, colors = brewer.pal(n = 8, name = "Blues"))
+
+#Entire Plot
+plot(seq(1,dim(covid_reduced_cases_d1)[1],1),covid_reduced_cases_d1$case_count, type = "l")
+lines(seq((dim(covid_reduced_cases_d1)[1]-20),dim(covid_reduced_cases_d1)[1],1),preds_6a$fcst$case_count[,1],type = "l",col='blue')
+
+#Visualize only forecasted points
+plot(tail(covid_reduced_cases_d1$case_count,21), type = "l",ylim=c(min(preds_6a$fcst$case_count[,2]),12100))
+lines(preds_6a$fcst$case_count[,1],type = "l",col='blue')
+lines(preds_6a$fcst$case_count[,2],type = "l",col='blue',lty=2)
+lines(preds_6a$fcst$case_count[,3],type = "l",col='blue',lty=2)
+
+short_ASE_fit6a = mean((tail(covid_reduced_cases_d1$case_count,21)[1:7]-preds_6a$fcst$case_count[1:7,1])^2) 
+short_ASE_fit6a
+short_ASE_fit6a^.5
+#7 Day RMSE of 1135.7
+#Maybe try to look up rolling window version
+
+long_ASE_fit6a = mean((tail(covid_reduced_cases_d1$case_count,21)-preds_6a$fcst$case_count[,1])^2) 
+long_ASE_fit6a
+long_ASE_fit6a^.5
+#21 Day RMSE of 1116.739 which is much lower than the 3806 from our ARIMA(6,1,14) model and lowest RMSE
+
+#Selected MLP Model1
+covidData = ts(covid$case_count[1:395])
+covidXX = data.frame(testsTS = ts(covid$tests_taken[1:395]), vaccinesTS = ts(covid$vaccine_doses_administered[1:395]), park_mobility= ts(covid$parks_percent_change_from_baseline[1:395]))
+covidXX_full = data.frame(testsTS = ts(covid$tests_taken), vaccinesTS = ts(covid$vaccine_doses_administered), park_mobility= ts(covid$parks_percent_change_from_baseline))
+set.seed(2)
+fitCOVIDXX = mlp(covidData,xreg = covidXX)
+fcstCOVIDXX= forecast(fitCOVIDXX,h=21,xreg = covidXX_full)
+
+plot(seq(1,21),fcstCOVIDXX$mean,type='l',ylim=c(-20000,20000),lwd=5)
+for (i in 1:20){
+    lines(seq(1,21),fcstCOVIDXX$all.mean[,i],col = 'grey',type = 'l')
+}
+lines(tail(covid$case_count,21),type = "l",col='blue',lwd=5)
+
+plot(seq(1,21),fcstCOVIDXX$mean,type='l',ylim=c(-20000,20000),lwd=5)
+lines(seq(1,21),fcstCOVIDXX$mean,col = "red")
+
+
+ASE_DEEP_LONG_XX = mean((tail(covid$case_count,21) - fcstCOVIDXX$mean)^2)
+ASE_DEEP_LONG_XX
+RMSE_DEEP_LONG_XX = sqrt(ASE_DEEP_LONG_XX)
+RMSE_DEEP_LONG_XX
+
+#Selected MLP Model2
+covidData = ts(covid$case_count[1:395])
+covidXX2 = data.frame(testsTS = ts(covid$tests_taken[1:395]), vaccinesTS = ts(covid$vaccine_doses_administered[1:395]))
+covidXX_full2 = data.frame(testsTS = ts(covid$tests_taken), vaccinesTS = ts(covid$vaccine_doses_administered))
+set.seed(2)
+fitCOVIDXX2 = mlp(covidData,xreg = covidXX2)
+fcstCOVIDXX2= forecast(fitCOVIDXX2,h=21,xreg = covidXX_full2)
+
+plot(seq(1,21),fcstCOVIDXX2$mean,type='l',ylim=c(-20000,20000),lwd=5)
+for (i in 1:20){
+    lines(seq(1,21),fcstCOVIDXX2$all.mean[,i],col = 'grey',type = 'l')
+}
+lines(tail(covid$case_count,21),type = "l",col='blue',lwd=5)
+
+plot(seq(1,21),fcstCOVIDXX2$mean,type='l',ylim=c(-20000,20000),lwd=5)
+lines(seq(1,21),fcstCOVIDXX2$mean,col = "red")
+
+
+ASE_DEEP_LONG_XX2 = mean((tail(covid$case_count,21) - fcstCOVIDXX2$mean)^2)
+ASE_DEEP_LONG_XX2
+RMSE_DEEP_LONG_XX2 = sqrt(ASE_DEEP_LONG_XX)
+RMSE_DEEP_LONG_XX2
+
+#Ensemble forecast
+adj_preds2=preds_6a$fcst$case_count_d1[,1]+tail(covid$case_count,22)[1:21]
+plot(adj_preds2,type='l',ylim=c(-10000,10000))
+lines(tail(covid$case_count,21),col='blue')
+
+adj_ASE_6a = mean((tail(covid$case_count,21)-adj_preds2)^2) 
+adj_ASE_6a^.5
+
+ensemble_preds=(adj_preds2+fcstCOVIDXX$mean)/2
+plot(tail(covid$case_count,21),type='l',ylim=c(-10000,10000))
+lines(seq(1,21),tail(ensemble_preds,21),col='blue')
+
+ensemble_ASE = mean((tail(covid$case_count,21)[1:7]-ensemble_preds[1:7])^2) 
+ensemble_ASE^.5
+
+ensemble_ASE = mean((tail(covid$case_count,21)-ensemble_preds)^2) 
+ensemble_ASE^.5
+
+#Final comparison plot
+plot(tail(covid$case_count,21),type='l',ylim=c(0,7000),lwd=4)
+lines(adj_preds2,type = "l",col='grey')
+lines(seq(1,21),fcstCOVIDXX$mean,col = "grey")
+lines(seq(1,21),tail(ensemble_preds,21),col='blue',lwd=2,lty=2)
+
+#Final comparison plot
+plot(tail(covid$case_count,100),type='l',ylim=c(0,30000),lwd=2)
+lines(seq(80,100),adj_preds2,type = "l",col='dark grey')
+lines(seq(80,100),fcstCOVIDXX$mean,col = "dark grey")
+lines(seq(80,100),tail(ensemble_preds,21),col='blue',lwd=2,lty=2)
+```
+
