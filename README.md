@@ -1,10 +1,8 @@
-# Time_Series_Project
-
 <a name="BackToTop"></a>
 
-# Ensemble_Classification_of_Employee_Attrition
+# Time Series Forecasting of Texas Covid Cases
 
->The goal of this project was to predict employees leaving a particular company due to retirement or resignation. I first normalized, standardized, or dummy coded necessary features. Then, I used the ROSE package to create synthetic data to balance the "yes" and "no" attrition levels. My model consisted of three meta-algorithms - bagging, boosting, and stacking, which achieved an accuracy of 87.6%. Afterwards, I predicted incomes using linear regression, and explored other areas of the dataset, including the differences in incomes by gender.
+>The goal of this project was to utilize a multivariate time series model to forecast Covid-19 Case Count in Texas both one and three weeks ahead. By providing a sufficiently accurate model of Texas Covid Case Count, Texas government leaders could use this model to make informed policy decisions regarding the public's health. first normalized, standardized, or dummy coded necessary features. Then, I used the ROSE package to create synthetic data to balance the "yes" and "no" attrition levels. My model consisted of three meta-algorithms - bagging, boosting, and stacking, which achieved an accuracy of 87.6%. Afterwards, I predicted incomes using linear regression, and explored other areas of the dataset, including the differences in incomes by gender.
 
 
 ---
