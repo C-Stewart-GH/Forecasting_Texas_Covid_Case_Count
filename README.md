@@ -2,7 +2,7 @@
 
 # Time Series Forecasting of Texas Covid Cases
 
->**Contributors: Cameron Stewart and Ana Glaser**
+**Contributors: Cameron Stewart and Ana Glaser**
 
 >The goal of this project was to utilize a multivariate time series model to forecast Covid-19 Case Count in Texas both one and three weeks ahead. By providing a sufficiently accurate model of Texas Covid Case Count, Texas government leaders could use this model to make informed policy decisions regarding the public's health. This project pulls in data from Texas Department of State Health Services and Google Mobility Trends between March 2020 - November 2021 to model the data. Using R packages lubridate and tidyverse, the team was able to merge the data from the multiple sources as consistent time series objects in a dataframe. Once merged, a through analysis of stationarity was reviewed for the response variable of Case Count. Finally, the team built and compared models ranging from simple univariate ARIMA to more complex ensemble models which combine multi-variate Vector Autoregressive and Multi-layer Perceptron models. Utilizing the ensembled model and one step ahead forecasting, our team was able to reach a one week forecast RMSE 903 Cases and a 3 week forecast RMSE of 1032 Cases.
 
@@ -11,16 +11,24 @@
 
 
 ## Table of Contents
-- [Predicting Attrition Summary](#Predicting_Attrition)
-- [More Findings](#More_Findings)
-- [Linear Regression for Incomes](#Linear_Regression)
-- [References and Resources](#References_and_Resources)
+- [Data Description](#Predicting_Attrition)
+- [Exploring Variables](#More_Findings)
+- [Comparing Models](#Linear_Regression)
+- [Conclusion](#References_and_Resources)
+- [References](#References_and_Resources)
 
 
 ---
 
 
-<a name="Predicting_Attrition"></a>  
+<a name="Data Description"></a>
+
+## Predicting Attrition Summary
+The dataset consisted of 36 total variables, with a mix of both quantitative and qualitative types. Some initial findings included: no null values, several features of a
+
+![Job Roles and Attrition](https://github.com/MichaelMazel/Ensemble_Classification_of_Employee_Attrition/blob/main/Employee_Attrition_Prediction_files/figure-gfm/unnamed-chunk-55-1.png)
+
+<a name="Data Description"></a>
 
 ## Predicting Attrition Summary
 The dataset consisted of 36 total variables, with a mix of both quantitative and qualitative types. Some initial findings included: no null values, several features of all one level, and correlations up to .95 (from monthly income and job level). "Job roles" produced large differences in attrition rates with the highest being 45% from the sales reps and lowest at 2% from the director roles.  
