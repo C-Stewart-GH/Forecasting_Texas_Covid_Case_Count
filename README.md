@@ -2,7 +2,9 @@
 
 # Time Series Forecasting of Texas Covid Cases
 
->The goal of this project was to utilize a multivariate time series model to forecast Covid-19 Case Count in Texas both one and three weeks ahead. By providing a sufficiently accurate model of Texas Covid Case Count, Texas government leaders could use this model to make informed policy decisions regarding the public's health. first normalized, standardized, or dummy coded necessary features. Then, I used the ROSE package to create synthetic data to balance the "yes" and "no" attrition levels. My model consisted of three meta-algorithms - bagging, boosting, and stacking, which achieved an accuracy of 87.6%. Afterwards, I predicted incomes using linear regression, and explored other areas of the dataset, including the differences in incomes by gender.
+>**Contributors: Cameron Stewart and Ana Glaser**
+
+>The goal of this project was to utilize a multivariate time series model to forecast Covid-19 Case Count in Texas both one and three weeks ahead. By providing a sufficiently accurate model of Texas Covid Case Count, Texas government leaders could use this model to make informed policy decisions regarding the public's health. This project pulls in data from Texas Department of State Health Services and Google Mobility Trends between March 2020 - November 2021 to model the data. Using R packages lubridate and tidyverse, the team was able to merge the data from the multiple sources as consistent time series objects in a dataframe. Once merged, a through analysis of stationarity was reviewed for the response variable of Case Count. Finally, the team built and compared models ranging from simple univariate ARIMA to more complex ensemble models which combine multi-variate Vector Autoregressive and Multi-layer Perceptron models. Utilizing the ensembled model and one step ahead forecasting, our team was able to reach a one week forecast RMSE 903 Cases and a 3 week forecast RMSE of 1032 Cases.
 
 
 ---
