@@ -22,10 +22,11 @@
 
 
 <a name="Data_Description"></a>
+[Final Presentation]: https://github.com/C-Stewart-GH/Forecasting_Texas_Covid_Case_Count/blob/main/PPT_Files/Final%20Project%20Presentation.pptx
 
 ## Data Description
 <img width="706" alt="image" src="https://user-images.githubusercontent.com/37990637/157994781-70e46845-b80d-4ac9-b466-678e813ab224.png">
-All links in 
+All links in [Final Presentation](https://github.com/C-Stewart-GH/Forecasting_Texas_Covid_Case_Count/blob/main/PPT_Files/Final%20Project%20Presentation.pptx).
 
 <a name="Exploring_Variables"></a>
 
