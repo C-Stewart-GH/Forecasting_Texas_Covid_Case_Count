@@ -11,26 +11,26 @@
 
 
 ## Table of Contents
-- [Data Description](#Predicting_Attrition)
-- [Exploring Variables](#More_Findings)
-- [Comparing Models](#Linear_Regression)
-- [Conclusion](#References_and_Resources)
-- [References](#References_and_Resources)
+- [Data Description](#Data_Description)
+- [Exploring Variables](#Exploring_Variables)
+- [Comparing Models](#Comparing_Models)
+- [Conclusion](#Conclusion)
+- [References](#References)
 
 
 ---
 
 
-<a name="Data Description"></a>
+<a name="Data_Description"></a>
 
-## Predicting Attrition Summary
+## Data Description
 The dataset consisted of 36 total variables, with a mix of both quantitative and qualitative types. Some initial findings included: no null values, several features of a
 
 ![Job Roles and Attrition](https://github.com/MichaelMazel/Ensemble_Classification_of_Employee_Attrition/blob/main/Employee_Attrition_Prediction_files/figure-gfm/unnamed-chunk-55-1.png)
 
-<a name="Data Description"></a>
+<a name="Exploring_Variables"></a>
 
-## Predicting Attrition Summary
+## Exploring Variables
 The dataset consisted of 36 total variables, with a mix of both quantitative and qualitative types. Some initial findings included: no null values, several features of all one level, and correlations up to .95 (from monthly income and job level). "Job roles" produced large differences in attrition rates with the highest being 45% from the sales reps and lowest at 2% from the director roles.  
 
 730 rows consisted of "no" for attrition and 140 rows of "yes". When I first ran my model, the accuracy for just the "yes" attrition level was less than 50%. I then integrated the ROSE package which allowed me to oversample the "yes" class by generating synthetic data based off feature space similarities. ROSE uses a smoothed-bootstrap approach.  
@@ -47,9 +47,9 @@ This plot illustrates some interesting relationships regarding attrition and job
 
 ---
 
-<a name="More_Findings"></a>
+<a name="Comparing_Models"></a>
 
-## More Findings 
+## Comparing Models
 Leadership roles were comprised of 91 females and 98 males, with monthly incomes being 11,993 and 12,672 dollars, respectively. There was not enough evidence to suggest male incomes were significantly different than female incomes (p-value .37). I used a two sample t-test, and corresponding graphs can be found below:  
 
 ![Female Incomes](https://github.com/MichaelMazel/Ensemble_Classification_of_Employee_Attrition/blob/main/Employee_Attrition_Prediction_files/figure-gfm/unnamed-chunk-53-3.png)  
@@ -61,9 +61,9 @@ Leadership roles were comprised of 91 females and 98 males, with monthly incomes
 
 ---
 
-<a name="Linear_Regression"></a>
+<a name="Conclusion"></a>
 
-## Linear Regression for Incomes Summary
+## Conclusion
 
 The goal here was to predict monthly incomes with linear regression. I used just the quantitative variables, and to meet the assumptions, I log transformed several features, including the response variable. After the assumptions were improved, I used LASSO for variable selection.  Job Level, Total Working Years, and Job Involvement were selected for the model. These achieved a .873 adjusted r-squared, or in other words, 87.3% of the variation in employee monthly incomes could be explained by these three features.
     
@@ -74,9 +74,9 @@ The goal here was to predict monthly incomes with linear regression. I used just
 ---
 
 
-<a name="References_and_Resources"></a>
+<a name="References"></a>
 
-## References and Resources  
+## References  
 
 Ensembling methods: https://github.com/kmutya/Ensemble-Learning-in-R   
 ROSE: https://www.analyticsvidhya.com/blog/2016/03/practical-guide-deal-imbalanced-classification-problems/   
@@ -84,6 +84,6 @@ LASSO: https://rstatisticsblog.com/data-science-in-action/machine-learning/lasso
 
 ##### Technologies
 R Studio  
-R version 4.0.3
+R version 4.1.2
 
 [Back to Top](#BackToTop)
