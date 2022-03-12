@@ -100,8 +100,7 @@ In the final comparison, we can see the RMSE of the ensemble model is the lowest
 
 ## Conclusion
 
-The goal here was to predict monthly incomes with linear regression. I used just the quantitative variables, and to meet the assumptions, I log transformed several features, including the response variable. After the assumptions were improved, I used LASSO for variable selection.  Job Level, Total Working Years, and Job Involvement were selected for the model. These achieved a .873 adjusted r-squared, or in other words, 87.3% of the variation in employee monthly incomes could be explained by these three features.
-    
+The goal here was to forecast Texas Covid Case Count with Time Series analysis. After extracting and cleaning the data for analysis, our team performed a thourough analysis using simple and complex models such as ARIMA, VAR, MLP, and Esembling Techniques. The final model with ensembling VAR and MLP achieved a final RMSE of 903 for the one week forecast and 1032 for the three week forecast. For a state with over 29 million people, this forecast using mobility, vaccinations, and testing data is more than sufficient to give policy makers a clear idea of the upcoming covid case trends. With this information, more informed policy decisions can be made.
 
 [Back to Top](#BackToTop)
 
