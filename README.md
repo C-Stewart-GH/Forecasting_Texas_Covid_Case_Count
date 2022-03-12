@@ -53,28 +53,39 @@ Next, we looked at the included features that could help us model the response. 
 
 ## Comparing Models
 
-Arima
+The team first explored a simple univariate ARIMA model. By differencing the data and finding the lowest ARMA AIC, we were able to identify the ideal ARIMA model.
 
 <img width="706" alt="image" src="https://user-images.githubusercontent.com/37990637/157997288-321870de-ed69-4f95-a23a-d9566b308052.png">
+
+Plotting the 21 day forecast of Texas Covid Case Count with a 95% confidence interval.
+
 <img width="427" alt="image" src="https://user-images.githubusercontent.com/37990637/157997317-9b0b6ce2-2d1c-412a-82f1-b1372065d3da.png">
 
-VAR
+Next, the team explored a multi-variate Vector Autoregressive (VAR) model. All the exanatory variable were included in this model. Utilizing AIC and BIC, we confirmed a lag of 8 was the ideal lag for this model. Plotted are the 95% confidence intervals for the forecast of all the included variables. To the right, are the features and coefficients in the model along with their significance.
 
 <img width="706" alt="image" src="https://user-images.githubusercontent.com/37990637/157997444-03a944b9-90d5-49c0-86b1-3dcdc4e965d8.png">
+
+Plotting the 21 day forecast of Texas Covid Case Count with a 95% confidence interval.
+
 <img width="466" alt="image" src="https://user-images.githubusercontent.com/37990637/157997459-a3ecddb1-3045-4b8d-a09b-0cdb6cb70f89.png">
 
-
-MLP
+Moving into more complex models, the team trialed a Multi-Layer Perceptron (MLP) Model. Below, is a mapping of the network along with the chosen parameters of the model. The model was trained 20 different times and the median value of the different models was used as the forecast. The number of layers and nodes per layer was verified by cross validation.
 
 <img width="706" alt="image" src="https://user-images.githubusercontent.com/37990637/157997503-639e5e6d-9f23-4ce0-82fb-9b65473b9aa4.png">
+
+Plotting the 21 day forecast of Texas Covid Case Count. Colors: Blue - Actual Case Count, Black - Forecast of Case Count, Grey - 20 different trained models
+
 <img width="478" alt="image" src="https://user-images.githubusercontent.com/37990637/157997520-d8b39f6b-0af2-4bf4-b984-c04e8f13288f.png">
 
-Ensemble
+With both the VAR and MLP models outperforming the more simplistic ARIMA model, and ensemble model was generated using both models. The mean of the forecast of both models was used to forecast Case Count. The plot shows the 21 day forecast of Texas Covid Case Count.
 
 <img width="706" alt="image" src="https://user-images.githubusercontent.com/37990637/157997558-e4902723-0bf9-4c91-80fd-f427dcef1e5e.png">
+
+To better see how the forecast of the ensemble model is performing, the last 100 observations were included in the plot.
+
 <img width="706" alt="image" src="https://user-images.githubusercontent.com/37990637/157997581-e9e289cc-e59d-4517-adab-dbfa2bfa5ce6.png">
 
-Final Comparison
+In the final comparison, we can see the RMSE of the ensemble model is the lowest for the short and long term forecast. Therefore, we will move foreward with this as our final model.
 
 <img width="706" alt="image" src="https://user-images.githubusercontent.com/37990637/157997604-5f7d9d67-ab11-4c51-836c-f3616020bbe9.png">
 
