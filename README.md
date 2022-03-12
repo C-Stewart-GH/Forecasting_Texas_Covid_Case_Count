@@ -24,9 +24,8 @@
 <a name="Data_Description"></a>
 
 ## Data Description
-The dataset consisted of 36 total variables, with a mix of both quantitative and qualitative types. Some initial findings included: no null values, several features of a
-
-![Job Roles and Attrition](https://github.com/MichaelMazel/Ensemble_Classification_of_Employee_Attrition/blob/main/Employee_Attrition_Prediction_files/figure-gfm/unnamed-chunk-55-1.png)
+<img width="706" alt="image" src="https://user-images.githubusercontent.com/37990637/157994781-70e46845-b80d-4ac9-b466-678e813ab224.png">
+All links in 
 
 <a name="Exploring_Variables"></a>
 
@@ -57,6 +56,7 @@ Leadership roles were comprised of 91 females and 98 males, with monthly incomes
 
 
 [Back to Top](#BackToTop)
+
 
 
 ---
