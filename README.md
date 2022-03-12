@@ -35,8 +35,11 @@ All links in [References](#References)
 <a name="Exploring_Variables"></a>
 
 ## Exploring Variables
+First, we looked at the response variable Texas Covid Case Count to determine stationarity. Based on teh autocorrelations and the Parzen window, there is strong evidence of wandering and we see some evidence of a seven day periodic trend both causing non-constant mean. We speculate the seven day periodic trend is likely attributed to some sort of reporting bias. The first and second have autocorrelation comparison gives us confidence the autocorrelation is staying relatively constant. Since the data is non-stationary, the data will need to be differenced and/or have the frequency removed in the models to stationarize the data.
+
 <img width="706" alt="image" src="https://user-images.githubusercontent.com/37990637/157996557-1dd21c09-dddc-4d7b-954a-16e351224524.png">
 
+Next, we looked at the included features that could help us model the response. Google mobility trends offer us insight into the reletive activity into different public sectors. Vaccinations contribute to decreasing the rate of spread. Covid testing can be a leading indicator that describes the relative proportion of the population who thinks they may have covid.
 
 <img width="706" alt="image" src="https://user-images.githubusercontent.com/37990637/157996581-22939eac-6d0c-406d-875b-c0980beee62e.png">
 
