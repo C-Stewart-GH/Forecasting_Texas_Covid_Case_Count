@@ -28,6 +28,8 @@
 
 All links in [References](#References)
 
+---
+
 <a name="Exploring_Variables"></a>
 
 ## Exploring Variables
@@ -85,7 +87,6 @@ In the final comparison, we can see the RMSE of the ensemble model is the lowest
 
 [Back to Top](#BackToTop)
 
-
 ---
 
 <a name="Conclusion"></a>
@@ -114,7 +115,8 @@ The goal here was to forecast Texas Covid Case Count with Time Series analysis. 
 
 [Google Mobility Data](https://www.google.com/covid19/mobility/)
 
-##### Technologies
+##### Technologies:
+
 R Studio  
 R version 4.1.2
 
